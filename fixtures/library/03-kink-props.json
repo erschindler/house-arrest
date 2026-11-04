@@ -1,0 +1,16 @@
+{
+  "pack": "Fab — Adult Prop Library",
+  "assets": [
+    { "id": "/Game/Fab/Kink/SM_Prop_PowerExchange", "name": "Power Exchange Collar", "kind": "prop", "tags": ["prop", "powerexchange"], "triangles": 4200, "lods": 2, "animated": false, "license": "18+ licensed" },
+    { "id": "/Game/Fab/Kink/SM_Prop_Bondage", "name": "Bondage Restraint Set", "kind": "prop", "tags": ["prop", "bondage"], "triangles": 6100, "lods": 2, "animated": false, "license": "18+ licensed" },
+    { "id": "/Game/Fab/Kink/SM_Prop_RoleplayCostume", "name": "Roleplay Costume Set", "kind": "prop", "tags": ["prop", "roleplaycostume"], "triangles": 9800, "lods": 3, "animated": false, "license": "18+ licensed" },
+    { "id": "/Game/Fab/Kink/SM_Prop_Exhibitionism", "name": "Exhibitionism Staging", "kind": "prop", "tags": ["prop", "exhibitionism"], "triangles": 3200, "lods": 2, "animated": false, "license": "18+ licensed" },
+    { "id": "/Game/Fab/Kink/SM_Prop_SensoryPlay", "name": "Sensory Play Kit", "kind": "prop", "tags": ["prop", "sensoryplay"], "triangles": 2400, "lods": 2, "animated": false, "license": "18+ licensed" },
+    { "id": "/Game/Fab/Kink/SM_Prop_ImpactPlay", "name": "Impact Play Set", "kind": "prop", "tags": ["prop", "impactplay"], "triangles": 1900, "lods": 2, "animated": false, "license": "18+ licensed" },
+    { "id": "/Game/Fab/Kink/SM_Prop_Humiliation", "name": "Humiliation Staging", "kind": "prop", "tags": ["prop", "humiliation"], "triangles": 2800, "lods": 2, "animated": false, "license": "18+ licensed" },
+    { "id": "/Game/Fab/Kink/SM_Prop_FetishObjects", "name": "Fetish Object Set", "kind": "prop", "tags": ["prop", "fetishobjects"], "triangles": 3600, "lods": 2, "animated": false, "license": "18+ licensed" },
+    { "id": "/Game/Fab/Kink/SM_Prop_GroupScenes", "name": "Group Scene Staging", "kind": "prop", "tags": ["prop", "groupscenes"], "triangles": 4400, "lods": 2, "animated": false, "license": "18+ licensed" },
+    { "id": "/Game/Fab/Kink/SM_Prop_PublicRisk", "name": "Public Risk Staging", "kind": "prop", "tags": ["prop", "publicrisk"], "triangles": 3900, "lods": 2, "animated": false, "license": "18+ licensed" },
+    { "id": "/Game/Fab/Kink/SM_Prop_CaptivityRoleplay", "name": "Captivity Roleplay Set", "kind": "prop", "tags": ["prop", "captivityroleplay"], "triangles": 5200, "lods": 2, "animated": false, "license": "18+ licensed" }
+  ]
+}

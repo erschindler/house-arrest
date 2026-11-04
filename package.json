@@ -7,6 +7,7 @@
   "scripts": {
     "demo": "node src/demo.ts",
     "dev:demo": "node src/demo.ts --dev-unrestricted",
+    "installer": "node src/tools/cli.ts",
     "test": "node --test test/",
     "typecheck": "tsc --noEmit"
   }

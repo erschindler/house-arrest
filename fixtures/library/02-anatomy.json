@@ -1,0 +1,55 @@
+{
+  "pack": "Fab — Anatomical Characters",
+  "assets": [
+    {
+      "id": "/Game/Fab/Anatomy/SK_Body_Full",
+      "name": "Full Anatomical Body",
+      "kind": "mesh",
+      "tags": ["nudity", "full", "anatomical", "body"],
+      "triangles": 96000,
+      "lods": 4,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/Anatomy/SK_Body_Partial",
+      "name": "Partial Undress Body",
+      "kind": "mesh",
+      "tags": ["nudity", "partial", "underwear", "torso"],
+      "triangles": 64000,
+      "lods": 3,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/Anatomy/AN_Intimacy_Suggestive",
+      "name": "Intimacy Suggestive",
+      "kind": "animation",
+      "tags": ["intimacy", "suggestive", "implied"],
+      "triangles": 0,
+      "lods": 1,
+      "animated": true,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/Anatomy/AN_Intimacy_Explicit",
+      "name": "Intimacy Explicit",
+      "kind": "animation",
+      "tags": ["intimacy", "explicit", "act"],
+      "triangles": 0,
+      "lods": 1,
+      "animated": true,
+      "license": "18+ licensed, performer consent on file"
+    },
+    {
+      "id": "/Game/Fab/Anatomy/SK_FetishOutfit_A",
+      "name": "Fetish Wardrobe Outfit A",
+      "kind": "prop",
+      "tags": ["outfit", "wardrobe", "fetish"],
+      "triangles": 18000,
+      "lods": 2,
+      "animated": false,
+      "license": "Fab Standard"
+    }
+  ]
+}

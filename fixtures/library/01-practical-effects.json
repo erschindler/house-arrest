@@ -1,0 +1,95 @@
+{
+  "pack": "Fab — Practical Effects Vol.1",
+  "assets": [
+    {
+      "id": "/Game/Fab/PracticalFX/SM_BloodPool_A",
+      "name": "Blood Pool A",
+      "kind": "decal",
+      "tags": ["blood", "pool", "decal"],
+      "triangles": 1800,
+      "lods": 2,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/PracticalFX/SM_BloodSpatter_B",
+      "name": "Blood Spatter B",
+      "kind": "decal",
+      "tags": ["blood", "spatter", "decal"],
+      "triangles": 9000,
+      "lods": 1,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/PracticalFX/M_Wound_Layered",
+      "name": "Layered Wound Material",
+      "kind": "material",
+      "tags": ["wound", "material", "flesh", "skin"],
+      "triangles": 0,
+      "lods": 1,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/PracticalFX/SM_OrganExposure",
+      "name": "Organ Exposure",
+      "kind": "decal",
+      "tags": ["organ", "gore", "decal"],
+      "triangles": 2400,
+      "lods": 2,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/PracticalFX/SM_SeveredLimb_Arm",
+      "name": "Severed Limb Arm",
+      "kind": "mesh",
+      "tags": ["dismember", "sever", "limb"],
+      "triangles": 24000,
+      "lods": 3,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/PracticalFX/M_DecompositionStage",
+      "name": "Decomposition Stage Material",
+      "kind": "material",
+      "tags": ["decomposition", "decay", "insect", "stain"],
+      "triangles": 0,
+      "lods": 1,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/PracticalFX/AN_Struggle_A",
+      "name": "Struggle A",
+      "kind": "animation",
+      "tags": ["brutal", "struggle", "grapple"],
+      "triangles": 0,
+      "lods": 1,
+      "animated": true,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/PracticalFX/AN_Torture_Prolonged",
+      "name": "Prolonged Distress",
+      "kind": "animation",
+      "tags": ["torture", "prolong", "restraint"],
+      "triangles": 0,
+      "lods": 1,
+      "animated": true,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/PracticalFX/AN_Dying_Agony",
+      "name": "Dying Agony",
+      "kind": "animation",
+      "tags": ["dying", "agony", "death"],
+      "triangles": 0,
+      "lods": 1,
+      "animated": true,
+      "license": "Fab Standard"
+    }
+  ]
+}

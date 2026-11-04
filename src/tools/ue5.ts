@@ -1,0 +1,275 @@
+/**
+ * UE5 emitter: turns an install report into the files an Unreal project needs.
+ *
+ * What this generates:
+ *   - HASAssetRegistry.json     the contract: class -> soft path, with fallbacks
+ *   - a C++ subsystem scaffold  loads that JSON and resolves classes at runtime
+ *   - HASContent.Build.cs       module dependencies
+ *   - IMPORT_CHECKLIST.csv      per-class acquisition and import status
+ *   - FAB_ACQUISITION_PLAN.md   search terms and acceptance checks for what is missing
+ *   - install-report.json       the machine-readable report itself
+ *
+ * What it cannot do: download a Fab pack, import a mesh, or compile the C++. The
+ * generated C++ is scaffolding, written to be read and wired in by an engineer;
+ * it has never been through a compiler in this repository. The JSON is the real
+ * deliverable and it is tested.
+ *
+ * Nothing here is timestamped. The project has no Date.now(), and the installer
+ * follows the same rule so its output is byte-comparable between runs.
+ */
+
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { stableStringify } from "../save/serialize.ts";
+import { requirementFor } from "../content/presentation.ts";
+import type { AssetClass } from "../content/presentation.ts";
+import type { InstallReport } from "./resolver.ts";
+import { specFor } from "./requirements.ts";
+
+const REGISTRY_PATH = "HASContent/Data/HASAssetRegistry.json";
+const HEADER_PATH = "HASContent/Source/HASContent/Public/HASContentSubsystem.h";
+const SOURCE_PATH = "HASContent/Source/HASContent/Private/HASContentSubsystem.cpp";
+const BUILD_PATH = "HASContent/HASContent.Build.cs";
+const CHECKLIST_PATH = "Docs/IMPORT_CHECKLIST.csv";
+const PLAN_PATH = "Docs/FAB_ACQUISITION_PLAN.md";
+const REPORT_PATH = "install-report.json";
+
+function write(outDir: string, relative: string, contents: string, written: string[]): void {
+  const target = join(outDir, relative);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, contents);
+  written.push(relative);
+}
+
+function registryJson(report: InstallReport): string {
+  const entries = report.resolutions
+    .filter((resolution) => resolution.status === "resolved" && resolution.primary)
+    .map((resolution) => ({
+      assetClass: resolution.assetClass,
+      kind: specFor(resolution.assetClass).kind,
+      path: resolution.primary?.id ?? "",
+      fallbacks: resolution.fallbacks.map((asset) => asset.id),
+      requires: requirementFor(resolution.assetClass)?.requires ?? [],
+    }));
+
+  return stableStringify({
+    schemaVersion: 1,
+    generatedBy: "house-arrest installer",
+    note: "Only classes permitted by contentSettings are present. Regenerate after changing settings.",
+    contentSettings: report.contentSettings,
+    entries,
+  });
+}
+
+function headerFile(): string {
+  return `// GENERATED — do not edit by hand.
+// Source of truth: src/content/presentation.ts (UE5_ASSET_MANIFEST).
+// Scaffolding only: this file has not been compiled in this repository.
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Subsystems/GameInstanceSubsystem.h"
+#include "HASContentSubsystem.generated.h"
+
+/**
+ * Resolves content classes such as "gore.blood.decal" to asset paths baked into
+ * HASAssetRegistry.json at install time. Classes that were gated out when the
+ * registry was generated are absent, so a disabled content level has nothing to
+ * resolve: the caller gets false, not a hidden asset.
+ */
+UCLASS()
+class HASCONTENT_API UHASContentSubsystem : public UGameInstanceSubsystem
+{
+    GENERATED_BODY()
+
+public:
+    virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+
+    UFUNCTION(BlueprintCallable, Category = "HAS|Content")
+    bool ResolveAssetClass(FName AssetClass, FSoftObjectPath& OutPath) const;
+
+    UFUNCTION(BlueprintCallable, Category = "HAS|Content")
+    bool HasAssetClass(FName AssetClass) const;
+
+    UFUNCTION(BlueprintCallable, Category = "HAS|Content")
+    int32 NumRegisteredClasses() const;
+
+private:
+    TMap<FName, FSoftObjectPath> Registry;
+};
+`;
+}
+
+function sourceFile(): string {
+  return `// GENERATED — do not edit by hand.
+// Scaffolding only: not compiled in this repository.
+#include "HASContentSubsystem.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+
+void UHASContentSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+    Super::Initialize(Collection);
+
+    const FString RegistryPath = FPaths::ProjectContentDir() / TEXT("HASContent/Data/HASAssetRegistry.json");
+    FString Raw;
+    if (!FFileHelper::LoadFileToString(Raw, *RegistryPath))
+    {
+        UE_LOG(LogTemp, Error, TEXT("HAS: registry missing at %s. Run the installer."), *RegistryPath);
+        return;
+    }
+
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Raw);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("HAS: registry JSON did not parse."));
+        return;
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* Entries = nullptr;
+    if (!Root->TryGetArrayField(TEXT("entries"), Entries) || Entries == nullptr) return;
+
+    for (const TSharedPtr<FJsonValue>& Entry : *Entries)
+    {
+        const TSharedPtr<FJsonObject> Object = Entry->AsObject();
+        if (!Object.IsValid()) continue;
+
+        FString ClassName;
+        FString AssetPath;
+        if (!Object->TryGetStringField(TEXT("assetClass"), ClassName)) continue;
+        if (!Object->TryGetStringField(TEXT("path"), AssetPath)) continue;
+        if (ClassName.IsEmpty() || AssetPath.IsEmpty()) continue;
+
+        Registry.Add(FName(*ClassName), FSoftObjectPath(AssetPath));
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("HAS: %d content classes registered."), Registry.Num());
+}
+
+bool UHASContentSubsystem::ResolveAssetClass(FName AssetClass, FSoftObjectPath& OutPath) const
+{
+    const FSoftObjectPath* Found = Registry.Find(AssetClass);
+    if (Found == nullptr || !Found->IsValid()) return false;
+    OutPath = *Found;
+    return true;
+}
+
+bool UHASContentSubsystem::HasAssetClass(FName AssetClass) const
+{
+    return Registry.Contains(AssetClass);
+}
+
+int32 UHASContentSubsystem::NumRegisteredClasses() const
+{
+    return Registry.Num();
+}
+`;
+}
+
+function buildFile(): string {
+  return `// GENERATED — do not edit by hand.
+using UnrealBuildTool;
+
+public class HASContent : ModuleRules
+{
+    public HASContent(ReadOnlyTargetRules Target) : base(Target)
+    {
+        PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "Json" });
+    }
+}
+`;
+}
+
+function checklistCsv(report: InstallReport): string {
+  const rows = ["assetClass,kind,status,primary,fallbacks,lods,triangles,license,pack"];
+  for (const resolution of report.resolutions) {
+    const spec = specFor(resolution.assetClass);
+    const primary = resolution.primary;
+    rows.push(
+      [
+        resolution.assetClass,
+        spec.kind,
+        resolution.status,
+        primary?.id ?? "",
+        resolution.fallbacks.map((asset) => asset.id).join(" | "),
+        primary ? String(primary.lods) : "",
+        primary ? String(primary.triangles) : "",
+        primary?.license ?? "",
+        primary?.pack ?? "",
+      ]
+        .map((value) => (value.includes(",") ? `"${value}"` : value))
+        .join(","),
+    );
+  }
+  return `${rows.join("\n")}\n`;
+}
+
+function acquisitionPlan(report: InstallReport): string {
+  const unresolved = report.resolutions.filter((resolution) => resolution.status === "unresolved");
+  const gated = report.resolutions.filter((resolution) => resolution.status === "gated");
+  const lines: string[] = [];
+
+  lines.push("# Content acquisition plan");
+  lines.push("");
+  lines.push("Generated by the house-arrest installer. No timestamps: regenerate to refresh.");
+  lines.push("");
+  lines.push(`- classes: ${report.totals.classes}`);
+  lines.push(`- resolved: ${report.totals.resolved}`);
+  lines.push(`- unresolved: ${report.totals.unresolved}`);
+  lines.push(`- gated by current settings: ${report.totals.gated}`);
+  lines.push("");
+
+  if (unresolved.length === 0) {
+    lines.push("Every permitted class has an asset. Nothing to acquire.");
+  } else {
+    lines.push("## Blocking gaps");
+    lines.push("");
+    for (const resolution of unresolved) {
+      const spec = specFor(resolution.assetClass);
+      lines.push(`### ${resolution.assetClass}`);
+      lines.push(`- kind: ${spec.kind}; LODs: ${spec.requiresLods ? "2+" : "n/a"}; triangle budget: ${spec.maxTriangles}`);
+      lines.push(`- search: ${spec.searchTerms.map((term) => `"${term}"`).join(", ")}`);
+      lines.push(`- acceptance: ${spec.acceptance}`);
+      const rejections = resolution.rejected.slice(0, 3);
+      if (rejections.length > 0) {
+        lines.push("- nearest rejects:");
+        for (const rejection of rejections) lines.push(`  - ${rejection.asset.id}: ${rejection.reason}`);
+      }
+      lines.push("");
+    }
+  }
+
+  if (gated.length > 0) {
+    lines.push("## Gated (art may exist; settings forbid it)");
+    lines.push("");
+    for (const resolution of gated) {
+      lines.push(`- ${resolution.assetClass}: needs ${resolution.missingContent.join(", ")}`);
+    }
+    lines.push("");
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+export function emitInstall(outDir: string, report: InstallReport): string[] {
+  const written: string[] = [];
+
+  write(outDir, REGISTRY_PATH, `${registryJson(report)}\n`, written);
+  write(outDir, HEADER_PATH, headerFile(), written);
+  write(outDir, SOURCE_PATH, sourceFile(), written);
+  write(outDir, BUILD_PATH, buildFile(), written);
+  write(outDir, CHECKLIST_PATH, checklistCsv(report), written);
+  write(outDir, PLAN_PATH, acquisitionPlan(report), written);
+  write(outDir, REPORT_PATH, `${stableStringify(report)}\n`, written);
+
+  return written;
+}
+
+export function resolvedClasses(report: InstallReport): AssetClass[] {
+  return report.resolutions.filter((entry) => entry.status === "resolved").map((entry) => entry.assetClass);
+}

@@ -133,6 +133,11 @@ export type PresentationReport = {
   missing: ContentTag[];
 };
 
+/** Look up the manifest row for a class. Used by the installer and validators. */
+export function requirementFor(assetClass: AssetClass): AssetRequirement | undefined {
+  return UE5_ASSET_MANIFEST.find((entry) => entry.assetClass === assetClass);
+}
+
 export class PresentationGate {
   private readonly gate: ContentGate;
   private readonly requirements = new Map<AssetClass, AssetRequirement>();

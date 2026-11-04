@@ -72,6 +72,29 @@ Tiers: `full` (on property, 1 min), `coarse` (nearby/expected, 15 min),
 need functions, so an off-screen character's state reflects the time that passed.
 Nothing is ever "spawned on demand".
 
+## Porting to UE5: the installer
+
+```bash
+npm run installer -- --library fixtures/library --out artifacts/ue5-install
+npm run installer -- --library <your-export> --settings mature --report-only
+```
+
+Reads an exported asset index (JSON), matches every content class against it under
+the current content settings, and emits:
+
+- `HASContent/Data/HASAssetRegistry.json` — class → soft path, with fallbacks. Only
+  classes the settings permit, so a disabled level cannot reach the engine.
+- a C++ subsystem scaffold that loads it, plus `HASContent.Build.cs`
+- `Docs/IMPORT_CHECKLIST.csv` — per-class import status
+- `Docs/FAB_ACQUISITION_PLAN.md` — search terms and acceptance checks for gaps
+
+Three outcomes per class, and only one is blocking: **resolved**, **gated** (art
+may exist, settings forbid it), **unresolved** (permitted and we have nothing).
+
+The C++ is scaffolding and has never been compiled here; the registry JSON is the
+contract and is tested, including that gated classes never appear in it.
+It cannot search Fab or download a pack — it matches a library you point it at.
+
 ## Testing with every content limit off
 
 ```bash
