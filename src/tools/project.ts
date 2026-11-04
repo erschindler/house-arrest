@@ -20,6 +20,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { stableStringify } from "../save/serialize.ts";
 import { emitSystems } from "./ue-systems.ts";
+import { emitRoomSystems } from "./ue-room-systems.ts";
 
 export type ProjectOptions = {
   /** Module and project name. Must be a valid C++ identifier. */
@@ -386,6 +387,9 @@ export function emitProject(outDir: string, options: ProjectOptions): string[] {
 
   // The gameplay half: components, data tables and the room-build script.
   written.push(...emitSystems(outDir, name));
+
+  // The physical half: contact, wounds, blood, dismemberment, voice, production.
+  written.push(...emitRoomSystems(outDir, name));
 
   return written;
 }

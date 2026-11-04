@@ -184,7 +184,7 @@ function main(): void {
             "Plugins/HASContent/Content/Data/HASAssetRegistry.json",
           );
         }
-        if (stage.id === "room") {
+        if (stage.id === "room" || stage.id === "props") {
           extraEnv["HAS_ROOM_ID"] = arg("room", "basement");
           extraEnv["HAS_LEVEL"] = arg("level", "/Game/Maps/HouseArrest");
         }

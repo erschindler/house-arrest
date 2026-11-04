@@ -28,6 +28,89 @@ there is no build step and no `node_modules`).
 
 ---
 
+# 0. The first build: the room
+
+This repository now builds one room before it builds a house. Everything else in
+the simulation still exists and still runs, but the level, the assets and the
+money are all pointed at a single concealed space and the loop that surrounds it.
+
+**The loop.** A computer on the desk lists adults advertising company in the city;
+the list is generated from a seed, and each entry has an area and a fee. Paying the
+fee puts a name in the delivery queue. A turned accomplice — or the player, if the
+room is finished and the street is quiet — brings them to the door, where custody
+takes over. Inside, the session runs on the trauma model: contact, tissue, blood,
+voice. The camera records it. The clip is worth what the camera, the light and the
+framing say it is worth, and uploading it adds that value to a float. The float buys
+a better camera, light, a tripod, tools, furniture, drainage — each of which raises
+the ceiling on the next clip.
+
+There is no network, no real marketplace, no upload and no cryptocurrency in this
+loop. The market is a list and a number.
+
+## What was added for it
+
+| Module | What it does |
+| --- | --- |
+| `src/sim/surface.ts` | The body as a physical object: 19 surface regions, tissue depth per region, structures at real depths (carotid at 16 mm, heart at 40, femur at 52), collider descriptors, clothing coverage and integrity, joint severance work, spray profiles, voice and face selection. |
+| `torture.ts` (extended) | Sessions now carry clothing, per-joint progress, pooled blood, systolic pressure, the current voice cue and the face. Cut and stab resolve through `resolveContact`, so clothing, angle, force and bone actually decide what is hit. New acts: `cutClothing`, `pullOff`, `sever`. |
+| `ue-room-systems.ts` | Emits the physical half of the UE5 integration (below). |
+
+## The components it emits
+
+| C++ | What it owns |
+| --- | --- |
+| `UHASPhysicsContactComponent` | Maps physics-asset bones to regions, resolves a sweep into a `FHASContactResult`, applies the impulse. The only place a collision becomes a wound. |
+| `UHASWoundComponent` | Wound channel geometry, cautery, total bleed, blood volume and pooling, arterial spray decals, clothing staining, survival estimate. |
+| `UHASDismembermentComponent` | Per-joint millimetre progress, stump hiding, constraint break, detached limb physics. A saw removes about twice what a knife does per pass. |
+| `UHASVoiceComponent` | Cue selection from pain/terror/shock/consciousness, male and female sound sets, expression morph targets. Silence means the airway or the consciousness is gone. |
+| `UHASProductionComponent` | Listings, delivery fees, recording, clip quality and value, uploads, camera tiers, equipment purchases. |
+
+Data tables: `HASSurfaces.csv`, `HASGarments.csv`, `HASVoiceCues.csv`, alongside the
+original `HASAnatomy.csv` and `HASTools.csv`. The room is furnished by
+`has_build_room_props.py`, which places the desk, computer, phone, camera rig, tool
+rack, chair, drain and light as tagged placeholders.
+
+## Controls the components expect
+
+| Input | Call |
+| --- | --- |
+| Take / drop a tool | `RegisterTool` / `ClearTools` |
+| Swing, press, drive | `ApplyStrike(tool, hit, force)` |
+| Bare hands | `ApplyHandContact(hit, force)` |
+| Cut clothing | `cutClothing` in the sim; garment coverage drops in C++ |
+| Sever a joint | `UHASDismembermentComponent::ApplyTool` once per pass |
+| Cauterise / stabilise | `Cauterize` / `StabiliseAll` |
+| Record / stop / upload | `BeginRecording` / `EndRecording` / `Upload` |
+
+## What is not in the first build, and will not be
+
+- **Sexual content in the room, including with a body.** A person held there cannot
+  consent, and a dead person cannot consent at all, so there is no sexual
+  interaction, no genital or mouth collision surface, and no player genital
+  simulation. The contact model is damage only. This is a design line, not a
+  setting: adding it would mean building a consent bypass, which the rest of the
+  engine exists to prevent.
+- **Real-world procedure.** Depths, bleed rates and lethality are balance numbers.
+  There is no technique, dosage or material guidance in the code or the CSVs.
+- **Blueprints, meshes, animations, audio.** Those are content classes. The
+  installer wires them or the component runs dry, and the first build will look
+  like grey boxes until you buy and import art.
+- **Anything outside the room.** The house, the neighbours, the job system and the
+  rest of the simulation run headlessly; the level does not draw them yet.
+
+## Build order
+
+The pipeline is eleven stages. For this slice you need `preflight` through
+`project` (all Node, no engine), then `room` and `props` (editor scripts), then
+`build`. `import` and `verify` only matter once you have art to bring in.
+
+```bash
+npm run run -- --library fixtures/library --settings dev \
+  --project ue/HouseArrest --engine-root "C:/Program Files/Epic Games/UE_5.5"
+```
+
+---
+
 # 1. What you need to install
 
 Nothing below is downloadable by this repository: the engine is 60+ GB, the art is
@@ -92,7 +175,7 @@ npm run run -- \
   --engine-root "C:/Program Files/Epic Games/UE_5.5"
 ```
 
-That is the whole machine. Ten stages, in dependency order:
+That is the whole machine. Eleven stages, in dependency order:
 
 | # | Stage | What it does | Needs |
 | --- | --- | --- | --- |
@@ -104,11 +187,12 @@ That is the whole machine. Ten stages, in dependency order:
 | 6 | `import` | Runs `has_import.py` **inside Unreal**, importing the drop folder into `/Game/HASContent` and writing an index of what actually landed. | engine + `--drop` |
 | 7 | `verify` | Runs `has_verify.py` inside Unreal: every path in the registry must actually load, or the pipeline stops. | engine |
 | 8 | `room` | Runs `has_build_hidden_room.py` inside Unreal: seals the chosen room, builds the false wall and tags the concealed volume. | engine |
-| 9 | `build` | Compiles `<Project>Editor` for your platform with the engine's own `Build.bat` / `Build.sh`. | engine |
-| 10 | `package` | `BuildCookRun` — build, cook, stage, pak, archive to `--archive`. | engine |
+| 9 | `props` | Runs `has_build_room_props.py`: places the computer, phone, camera rig, tool rack, chair, drain and light as tagged placeholders. | engine |
+| 10 | `build` | Compiles `<Project>Editor` for your platform with the engine's own `Build.bat` / `Build.sh`. | engine |
+| 11 | `package` | `BuildCookRun` — build, cook, stage, pak, archive to `--archive`. | engine |
 
 Stages 1–5 are pure Node and **always work**, on any machine, with no engine
-installed. Stages 6–10 need an engine and are skipped with an explicit reason when
+installed. Stages 6–11 need an engine and are skipped with an explicit reason when
 there isn't one — so the offline half is usable on a laptop, and the engine half is
 usable on the machine that has UE.
 
@@ -430,11 +514,12 @@ Removing the preset at ship time is three deletions, listed at the top of
 # 8. Status
 
 - Simulation core: 24 content classes, 11 kink categories, 12 rooms with 40 anchors,
-  6 jobs, 7 objectives, 6 endings, confinement, leverage, a concealed room, custody
-  and an organ-level trauma model. Full save/load, deterministic. 146 tests.
-- Installer and pipeline: ten stages, Node-side stages tested, generated artifacts
-  asserted. The project stage also emits eleven C++ components, two data tables, the
-  room-build script and a systems document.
+  6 jobs, 7 objectives, 6 endings, confinement, leverage, a concealed room, custody,
+  an organ-level trauma model and a contact/blood/clothing layer. Full save/load,
+  deterministic. 156 tests.
+- Installer and pipeline: eleven stages, Node-side stages tested, generated artifacts
+  asserted. The project stage emits 22 C++ files, five data tables, two room scripts
+  and two systems documents.
 - Generated C++, editor Python and engine invocations: **written, never executed**.
   No engine exists in this repository, so nothing in `ue/` has been compiled or run.
   That is a statement of fact, not a disclaimer: it is the first thing you should

@@ -32,6 +32,26 @@ import type { Rng } from "../core/rng.ts";
 import type { DressState } from "./anatomy.ts";
 import { BASE_BLOOD_VOLUME } from "./anatomy.ts";
 import type { Npc, NpcId } from "./types.ts";
+import {
+  JOINT_IDS,
+  JOINT_SPECS,
+  coverageAt,
+  cutClothing,
+  expressionFor,
+  garmentsFor,
+  pullOff,
+  resolveContact,
+  severanceStep,
+  voiceFor,
+} from "./surface.ts";
+import type {
+  FaceExpression,
+  GarmentSlot,
+  GarmentState,
+  JointId,
+  SurfaceRegion,
+  VoiceState,
+} from "./surface.ts";
 
 export type TortureRegion =
   | "head"
@@ -134,12 +154,14 @@ export const REGION_ORGANS: Partial<Record<TortureRegion, OrganId[]>> = {
 };
 
 /** Baseline bleed multiplier for the region itself: a thigh is not a forearm. */
-export const REGION_BLEED: Record<TortureRegion, number> = {
+export const REGION_BLEED: Record<SurfaceRegion, number> = {
   head: 1.4,
+  face: 1.9,
   neck: 3,
   chest: 1.6,
   abdomen: 1.4,
   back: 1.3,
+  pelvis: 1.8,
   leftUpperArm: 1.2,
   leftForearm: 1,
   leftHand: 0.7,
@@ -208,16 +230,19 @@ export const TOOL_SPECS: Record<ToolId, ToolSpec> = {
 };
 
 export type TortureAct =
-  | { kind: "cut"; region: TortureRegion; depth: number; tool: ToolId }
-  | { kind: "stab"; region: TortureRegion; depth: number; tool: ToolId }
-  | { kind: "burn"; region: TortureRegion; tool: ToolId }
-  | { kind: "blunt"; region: TortureRegion; tool: ToolId }
+  | { kind: "cut"; region: SurfaceRegion; depth: number; tool: ToolId }
+  | { kind: "stab"; region: SurfaceRegion; depth: number; tool: ToolId }
+  | { kind: "burn"; region: SurfaceRegion; tool: ToolId }
+  | { kind: "blunt"; region: SurfaceRegion; tool: ToolId }
   | { kind: "nail"; digit: string; tool: ToolId }
   | { kind: "amputate"; limb: LimbId; tool: ToolId }
   | { kind: "cauterize"; woundId: string }
   | { kind: "tourniquet"; limb: LimbId }
   | { kind: "undress"; dress: DressState }
   | { kind: "restrain"; part: "wrists" | "ankles" | "gag"; on: boolean }
+  | { kind: "cutClothing"; region: SurfaceRegion; tool: ToolId }
+  | { kind: "pullOff"; slot: GarmentSlot; force: number }
+  | { kind: "sever"; joint: JointId; tool: ToolId; force: number }
   | { kind: "sedate" };
 
 export type OrganState = {
@@ -235,7 +260,7 @@ export type LimbState = {
 
 export type TortureWound = {
   id: string;
-  region: TortureRegion;
+  region: SurfaceRegion;
   tool: ToolId;
   kind: "cut" | "stab" | "burn" | "blunt" | "amputation";
   depth: number;
@@ -279,6 +304,14 @@ export type TortureSessionState = {
   nails: Record<string, boolean>;
   wounds: TortureWound[];
   vitals: TortureVitals;
+  /** Which voice set the audio layer should use. */
+  sex: "male" | "female";
+  garments: GarmentState[];
+  /** Millimetres of work done per joint, for progressive dismemberment. */
+  joints: Record<JointId, number>;
+  blood: { poolMl: number; sprays: number; systolic: number };
+  voice: VoiceState;
+  expression: FaceExpression;
   acts: number;
   screams: number;
   ended: boolean;
@@ -326,6 +359,12 @@ function emptyLimbs(): Record<LimbId, LimbState> {
   return out;
 }
 
+function emptyJoints(): Record<JointId, number> {
+  const out = {} as Record<JointId, number>;
+  for (const joint of JOINT_IDS) out[joint] = 0;
+  return out;
+}
+
 export function createTortureSession(
   victim: Npc,
   atMinute: number,
@@ -353,6 +392,16 @@ export function createTortureSession(
     limbs: emptyLimbs(),
     nails,
     wounds: [],
+    garments: garmentsFor(dress),
+    joints: emptyJoints(),
+    blood: { poolMl: 0, sprays: 0, systolic: 118 },
+    sex: victim.gender === "male" ? "male" : "female",
+    voice: {
+      cue: "whimper",
+      intensity: 0.2,
+      assetClass: victim.gender === "male" ? "audio.voice.male" : "audio.voice.female",
+    },
+    expression: "fear",
     vitals: {
       blood: clamp(victim.injury.vitals.blood, 0, BASE_BLOOD_VOLUME),
       pain: clamp(victim.injury.vitals.pain, 0, 100),
@@ -374,9 +423,9 @@ export function createTortureSession(
   };
 }
 
-function limbForRegion(region: TortureRegion): LimbId | null {
+function limbForRegion(region: SurfaceRegion): LimbId | null {
   for (const limb of LIMB_IDS) {
-    if (LIMB_REGIONS[limb].includes(region)) return limb;
+    if (LIMB_REGIONS[limb].some((entry) => entry === region)) return limb;
   }
   return null;
 }
@@ -396,19 +445,13 @@ function requiredLevel(act: TortureAct): "graphic" | "extreme" | null {
     case "cauterize":
     case "undress":
     case "restrain":
+    case "cutClothing":
+    case "pullOff":
     case "sedate":
       return null;
+    case "sever":
+      return "extreme";
   }
-}
-
-function organHit(act: { region: TortureRegion; depth: number; tool: ToolId }, rng: Rng): OrganId | null {
-  const candidates = REGION_ORGANS[act.region];
-  if (!candidates || candidates.length === 0) return null;
-  const tool = TOOL_SPECS[act.tool];
-  const depth = clamp01(act.depth);
-  const chance = tool.precision * (0.25 + depth * 0.75) * (depth > 0.5 ? 1 : 0.5);
-  if (!rng.chance(clamp01(chance))) return null;
-  return rng.pick(candidates);
 }
 
 function pushWound(
@@ -484,6 +527,10 @@ export function applyAct(
       throw new TortureRefusedError(`undressing to "${act.dress}" needs nudity at "${needed}" or above`);
     }
     session.dress = act.dress;
+    for (const garment of session.garments) {
+      garment.coverage = 0;
+      garment.removed = true;
+    }
     session.vitals.terror = clamp(session.vitals.terror + 8, 0, 100);
     return { ...idle, ok: true, summary: `They are ${act.dress === "undressed" ? "undressed" : "partly undressed"}.`, noise: 2 };
   }
@@ -492,6 +539,78 @@ export function applyAct(
     session.restraints[act.part] = act.on;
     if (act.part === "gag" && act.on) session.vitals.terror = clamp(session.vitals.terror + 5, 0, 100);
     return { ...idle, ok: true, summary: `${act.part} ${act.on ? "secured" : "released"}.`, noise: 3 };
+  }
+
+  if (act.kind === "cutClothing") {
+    const removed = cutClothing(session.garments, act.region, act.tool);
+    session.acts += 1;
+    session.vitals.terror = clamp(session.vitals.terror + 2, 0, 100);
+    return {
+      ...idle,
+      ok: true,
+      summary: removed > 0
+        ? `The last of the fabric gives; the ${act.region} is bare.`
+        : `The ${act.tool} opens the fabric over the ${act.region}.`,
+      noise: 3,
+    };
+  }
+
+  if (act.kind === "pullOff") {
+    const result = pullOff(session.garments, act.slot, act.force);
+    if (!result.removed) return { ...idle, summary: "there is nothing left there to pull" };
+    session.acts += 1;
+    session.vitals.terror = clamp(session.vitals.terror + 6, 0, 100);
+    return { ...idle, ok: true, summary: result.torn ? `The ${act.slot} tears off.` : `The ${act.slot} comes off.`, noise: 4 };
+  }
+
+  if (act.kind === "sever") {
+    const joint = JOINT_SPECS[act.joint];
+    const limb = session.limbs[joint.limb];
+    if (!limb.attached) return { ...idle, summary: "that limb is already off" };
+
+    const step = severanceStep(session.joints[act.joint], act.joint, act.tool, act.force);
+    session.joints[act.joint] = step.progressMm;
+    session.acts += 1;
+    session.vitals.pain = clamp(session.vitals.pain + 6, 0, 100);
+    session.vitals.terror = clamp(session.vitals.terror + 4, 0, 100);
+
+    if (!step.done) {
+      return {
+        ...idle,
+        ok: true,
+        summary: `${joint.label}: ${Math.round((step.progressMm / joint.workMm) * 100)}% through.`,
+        noise: step.noise,
+      };
+    }
+
+    limb.attached = false;
+    limb.function = 0;
+    session.vitals.shock = clamp(session.vitals.shock + 30, 0, 100);
+    session.vitals.consciousness = clamp(session.vitals.consciousness - 20, 0, 100);
+
+    const bleeding = limb.tourniquet ? 2 : joint.bleed;
+    pushWound(session, {
+      region: joint.region,
+      tool: act.tool,
+      kind: "amputation",
+      depth: 1,
+      bleeding,
+      pain: 26,
+      atMinute,
+      limb: joint.limb,
+    });
+    if (!limb.tourniquet) session.blood.sprays += 1;
+
+    const died = checkLethal(session, atMinute);
+    return {
+      ...idle,
+      ok: true,
+      summary: limb.tourniquet
+        ? `${joint.label} separates. The tourniquet holds; it is not bleeding out yet.`
+        : `${joint.label} separates and the ${joint.vessel} is open. This is minutes.`,
+      noise: step.noise + 6,
+      died,
+    };
   }
 
   if (act.kind === "cauterize") {
@@ -601,43 +720,65 @@ export function applyAct(
   if (act.kind === "cut" || act.kind === "stab") {
     const depth = clamp01(act.depth);
     const region = act.region;
-    const bleedScale = REGION_BLEED[region] * tool.bleed * depth;
+    const coverage = coverageAt(session.garments, region);
+
+    // The physics layer decides how far the edge actually went; the physiology
+    // layer only sees the result. Clothing is a real obstacle, not a costume.
+    const contact = resolveContact({
+      region,
+      tool: act.tool,
+      pointX: 0.3 + depth * 0.4,
+      angleDeg: act.kind === "stab" ? 8 : 35,
+      forceN: 40 + depth * 120,
+      commandedCm: depth * TOOL_SPECS[act.tool].maxDepth * 14,
+      clothing: coverage,
+    });
+    const normalised = clamp01(contact.depthCm / 14);
+
     const wound = pushWound(session, {
       region,
       tool: act.tool,
       kind: act.kind,
-      depth,
-      bleeding: Number(bleedScale.toFixed(2)),
-      pain: Math.round(tool.pain * (0.6 + depth)),
+      depth: normalised,
+      bleeding: contact.bleedMlMin,
+      pain: contact.pain,
       atMinute,
       limb: limbForRegion(region),
     });
 
     session.vitals.pain = clamp(session.vitals.pain + wound.pain, 0, 100);
-    session.vitals.shock = clamp(session.vitals.shock + wound.pain * 0.4, 0, 100);
+    session.vitals.shock = clamp(session.vitals.shock + wound.pain * 0.35, 0, 100);
+    session.blood.poolMl += wound.bleeding * 0.2;
 
-    if (act.kind === "stab") {
-      organ = organHit({ region, depth, tool: act.tool }, rng);
-      if (organ) {
-        const state = session.organs[organ];
-        state.exposed = true;
-        const hit = clamp01(0.45 + depth * 0.55);
-        state.integrity = clamp01(state.integrity - hit);
-        if (state.integrity <= 0) state.destroyed = true;
-        damage = hit;
-        session.vitals.shock = clamp(session.vitals.shock + 18, 0, 100);
-        session.vitals.blood = Math.max(0, session.vitals.blood - ORGAN_SPECS[organ].bleed * 4);
-        summary = `${ORGAN_SPECS[organ].label} is opened.`;
-        if (state.destroyed) summary = `${ORGAN_SPECS[organ].label} is destroyed.`;
-      }
+    organ = contact.organ;
+    if (organ) {
+      const state = session.organs[organ];
+      state.exposed = true;
+      const hit = clamp01(0.35 + normalised * 0.65);
+      state.integrity = clamp01(state.integrity - hit);
+      if (state.integrity <= 0) state.destroyed = true;
+      damage = hit;
+      session.vitals.shock = clamp(session.vitals.shock + 14, 0, 100);
+      session.vitals.blood = Math.max(0, session.vitals.blood - contact.bleedMlMin * 0.1);
+      summary = `${ORGAN_SPECS[organ].label} is opened.`;
+      if (state.destroyed) summary = `${ORGAN_SPECS[organ].label} is destroyed.`;
+      if (contact.structure?.kind === "artery") session.blood.sprays += 1;
+    } else if (contact.deflectionDeg > 0) {
+      summary = `The ${act.tool} turns ${contact.deflectionDeg}° on bone and stops at ${contact.depthCm.toFixed(1)} cm.`;
+    } else {
+      summary = `A ${act.kind} to the ${region.replace(/([A-Z])/g, " $1").toLowerCase()}, ${contact.depthCm.toFixed(1)} cm in.`;
     }
+    if (contact.structure && contact.structure.kind !== "organ") summary += ` The ${contact.structure.label} is cut.`;
+    if (contact.through) summary += " It goes right through.";
+    if (coverage > 0.2) summary += ` (through ${Math.round(coverage * 100)}% clothing)`;
+    noise = contact.noise;
 
     session.acts += 1;
     const died = checkLethal(session, atMinute);
     return {
       ...idle,
       ok: true,
-      summary: summary || `A ${act.kind} to the ${region.replace(/([A-Z])/g, " $1").toLowerCase()}, ${Math.round(depth * 100)}% deep.`,
+      summary,
       noise,
       organ,
       damage,
@@ -722,6 +863,10 @@ export function advanceTorture(
   }
 
   vitals.blood = Math.max(0, vitals.blood - bleedRate * minutes);
+  session.blood.poolMl += bleedRate * minutes * 0.55;
+  session.blood.systolic = Math.round(35 + 85 * clamp01(vitals.blood / BASE_BLOOD_VOLUME));
+  session.voice = voiceFor(vitals, session.sex);
+  session.expression = expressionFor(vitals);
 
   for (const wound of session.wounds) {
     if (wound.infected) continue;
@@ -805,6 +950,22 @@ export function survivalEstimate(session: TortureSessionState): number {
   return clamp01(bloodFraction * 0.7 + (1 - session.vitals.shock / 100) * 0.3 - bleedPressure);
 }
 
+/** Fill in fields added after a save was written, so old saves still load. */
+export function normaliseSession(session: TortureSessionState | null): TortureSessionState | null {
+  if (!session) return null;
+  const sex = session.sex ?? "female";
+  const bloodFraction = clamp01(session.vitals.blood / BASE_BLOOD_VOLUME);
+  return {
+    ...session,
+    sex,
+    garments: session.garments ?? garmentsFor(session.dress),
+    joints: session.joints ?? emptyJoints(),
+    blood: session.blood ?? { poolMl: 0, sprays: 0, systolic: Math.round(35 + 85 * bloodFraction) },
+    voice: session.voice ?? voiceFor(session.vitals, sex),
+    expression: session.expression ?? expressionFor(session.vitals),
+  };
+}
+
 export function describeSession(session: TortureSessionState): string[] {
   const removed = DIGITS.filter((digit) => session.nails[digit]).length;
   const detached = LIMB_IDS.filter((limb) => !session.limbs[limb].attached);
@@ -814,6 +975,10 @@ export function describeSession(session: TortureSessionState): string[] {
     `blood ${Math.round((session.vitals.blood / BASE_BLOOD_VOLUME) * 100)}%, pain ${Math.round(session.vitals.pain)}, shock ${Math.round(session.vitals.shock)}, consciousness ${Math.round(session.vitals.consciousness)}`,
     `terror ${Math.round(session.vitals.terror)}, compliance ${Math.round(session.vitals.compliance)}, infection ${Math.round(session.vitals.infection)}`,
     `${session.wounds.length} wound(s), ${removed} nail(s) removed, ${detached.length} limb(s) off${destroyed.length > 0 ? `, destroyed: ${destroyed.join(", ")}` : ""}`,
+    `clothing: ${session.garments.filter((garment) => garment.coverage > 0).map((garment) => `${garment.item} ${Math.round(garment.coverage * 100)}%`).join(", ") || "none"}`,
+    `pooled ${Math.round(session.blood.poolMl)} ml, pressure ${session.blood.systolic}, sprays ${session.blood.sprays}`,
+    `voice ${session.voice.cue} (${Math.round(session.voice.intensity * 100)}%), face ${session.expression}`,
+    `joints: ${JOINT_IDS.filter((joint) => session.joints[joint] > 0).map((joint) => `${joint} ${Math.round((session.joints[joint] / JOINT_SPECS[joint].workMm) * 100)}%`).join(", ") || "none worked"}`,
     session.ended ? `ended at minute ${session.endedAtMinute ?? 0}: ${session.causeOfDeath ?? "survived"}` : `still going, minute ${session.minutes}`,
   ];
 }

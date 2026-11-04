@@ -27,7 +27,7 @@ import type { SimTier } from "../sim/lod.ts";
 import type { Relationship } from "../sim/relationship.ts";
 import type { GameEventLogEntry, Memory, Npc, NpcId } from "../sim/types.ts";
 
-export const SNAPSHOT_VERSION = 4;
+export const SNAPSHOT_VERSION = 5;
 
 export type WorldSnapshot = {
   version: number;

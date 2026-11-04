@@ -28,7 +28,7 @@ import type {
   PressOutcome,
   RecruitRole,
 } from "./manipulation.ts";
-import { advanceTorture, applyAct, createTortureSession } from "./torture.ts";
+import { advanceTorture, applyAct, createTortureSession, normaliseSession } from "./torture.ts";
 import type { TortureAct, TortureActResult, TortureSessionState } from "./torture.ts";
 import { advanceClock, createClock, dayIndex, minuteOfDay, weekdayIndex } from "../core/clock.ts";
 import type { Clock } from "../core/clock.ts";
@@ -238,7 +238,7 @@ export class World {
     world.manipulation.restore(snapshot.manipulation);
     world.facility.restore(snapshot.facility);
     world.custody.restore(snapshot.custody);
-    world.torture = snapshot.tortureSession;
+    world.torture = normaliseSession(snapshot.tortureSession);
     world.tiers = new Map(snapshot.tiers);
     world.tierRefreshedAt = snapshot.tierRefreshedAt;
 
