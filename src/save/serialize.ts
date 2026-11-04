@@ -13,13 +13,16 @@ import type { RngState } from "../core/rng.ts";
 import type { ContentSettings } from "../content/gate.ts";
 import type { SceneSnapshot } from "../sim/consent.ts";
 import type { EconomySnapshot } from "../sim/economy.ts";
+import type { EmploymentState } from "../sim/jobs.ts";
+import type { NetState } from "../sim/net.ts";
+import type { PhoneState } from "../sim/phone.ts";
 import type { HouseholdState } from "../sim/household.ts";
 import type { InvestigationState } from "../sim/investigation.ts";
 import type { SimTier } from "../sim/lod.ts";
 import type { Relationship } from "../sim/relationship.ts";
 import type { GameEventLogEntry, Memory, Npc, NpcId } from "../sim/types.ts";
 
-export const SNAPSHOT_VERSION = 2;
+export const SNAPSHOT_VERSION = 3;
 
 export type WorldSnapshot = {
   version: number;
@@ -33,6 +36,9 @@ export type WorldSnapshot = {
   memories: Memory[];
   memoryCounter: number;
   economy: EconomySnapshot;
+  employment: EmploymentState;
+  phone: PhoneState;
+  net: NetState;
   household: HouseholdState;
   investigation: InvestigationState;
   cooldowns: [string, number][];

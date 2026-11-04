@@ -16,6 +16,7 @@ import { formatClock } from "./core/clock.ts";
 import { deserializeWorld, serializeWorld } from "./save/serialize.ts";
 import { World } from "./sim/world.ts";
 import { conditionScore } from "./sim/household.ts";
+import { describeObjectives } from "./sim/goals.ts";
 import { needComfortIndex } from "./sim/needs.ts";
 
 function line(text = ""): void {
@@ -57,7 +58,7 @@ function scenarioMain(): void {
   line(`house condition: ${conditionScore(world.household)}/100, ${openIssues} open issue${openIssues === 1 ? "" : "s"}`);
   line(
     `player money: $${world.economy.balance}` +
-      (world.economy.balance < 0 ? " (overdrawn — bills outrun income in this build; there is no job system yet)" : ""),
+      (world.economy.balance < 0 ? " (overdrawn — nobody took a job in this run; see section 6)" : ""),
   );
   line();
   line("chronicle (most recent first):");
@@ -283,6 +284,54 @@ function scenarioContentFramework(devMode: boolean): void {
   }
 }
 
+function scenarioSystems(): void {
+  banner("6. SPACE, PHONE, WORK, AND THE NET");
+
+  const world = World.create({ seed: "systems-demo", npcCount: 80, settings: { darkThemes: true } });
+  world.takeJob("supportDesk");
+  world.tick(1440 * 20);
+  world.share("complaint", "The heating is making a noise I cannot afford.");
+
+  const placements = world.placements();
+  line(`transforms after 20 days: ${placements.length} characters on the property`);
+  for (const placement of placements.slice(0, 3)) {
+    line(
+      `  ${placement.npcId} — ${world.space.describe(placement.room)}, anchor ${placement.anchorId}, ` +
+        `(${placement.position.x}, ${placement.position.y}, ${placement.position.z})`,
+    );
+  }
+
+  line();
+  line(`phone: ${world.phone.unreadCount()} unread`);
+  for (const message of world.phone.recent(3)) {
+    line(`  [${message.direction}] ${message.body}`);
+  }
+
+  line();
+  line(`net: ${world.net.posts.length} posts, ${world.net.followers} followers, exposure ${world.net.exposure}/100`);
+  for (const post of world.feed(3)) {
+    line(`  ${post.author === "player" ? "you" : post.author}: ${post.body}`);
+  }
+
+  const job = world.employment.job;
+  line();
+  line(
+    `work: ${job ? job.title : "none"} — performance ${world.employment.performance.toFixed(0)}, ` +
+      `${world.employment.shiftsWorked} shift(s) paid, ${world.employment.absences} absence(s), status ${world.employment.status}`,
+  );
+
+  line();
+  line("objectives:");
+  for (const row of describeObjectives(world.objectives())) line(`  ${row}`);
+  line(`progress: ${world.progress().toFixed(2)}`);
+
+  const ending = world.ending();
+  line();
+  line(`ending: ${ending ? `${ending.ending} — ${ending.reason}` : "still going"}`);
+  line();
+  line("Placement consumes no randomness: adding a room cannot shift the save's future.");
+}
+
 function main(): void {
   const devMode = process.argv.includes("--dev-unrestricted");
 
@@ -293,6 +342,7 @@ function main(): void {
   scenarioSaveLoad();
   scenarioPerformance();
   scenarioContentFramework(devMode);
+  scenarioSystems();
   line();
   line("Done.");
 }

@@ -14,7 +14,7 @@
 
 import { ContentGate } from "../content/gate.ts";
 import type { ContentSettings } from "../content/gate.ts";
-import { advanceClock, createClock, dayIndex, minuteOfDay } from "../core/clock.ts";
+import { advanceClock, createClock, dayIndex, minuteOfDay, weekdayIndex } from "../core/clock.ts";
 import type { Clock } from "../core/clock.ts";
 import { createRng } from "../core/rng.ts";
 import type { Rng } from "../core/rng.ts";
@@ -39,10 +39,20 @@ import type { WeaponKind } from "./anatomy.ts";
 import { TIER_INTERVAL_MINUTES, assignTiers, countTiers } from "./lod.ts";
 import type { SimTier, TierAssignment } from "./lod.ts";
 import { MemoryStore } from "./memory.ts";
+import { Employment, JOB_MARKET, idleSchedule, scheduleForJob } from "./jobs.ts";
+import type { JobOffer } from "./jobs.ts";
+import { evaluateEnding, evaluateObjectives, overallProgress } from "./goals.ts";
+import type { Ending, GoalInput, Objective } from "./goals.ts";
+import { Net } from "./net.ts";
+import type { NetDeps, PostKind, SocialPost } from "./net.ts";
+import { Phone } from "./phone.ts";
+import type { PhoneDeps, PhoneMessage } from "./phone.ts";
+import { Space } from "./space.ts";
+import type { Placement } from "./space.ts";
 import { advanceNeeds, needComfortIndex, moodFromNeeds } from "./needs.ts";
 import { RelationshipStore } from "./relationship.ts";
 import { blockAt, isOnProperty } from "./schedule.ts";
-import type { GameEventLogEntry, LogInput, Npc, NpcId } from "./types.ts";
+import type { GameEventLogEntry, LocationId, LogInput, Npc, NpcId } from "./types.ts";
 
 export type WorldOptions = {
   seed?: number | string;
@@ -76,6 +86,12 @@ export class World {
   readonly playerId: NpcId;
   readonly log: GameEventLogEntry[] = [];
 
+  /** The floorplan and the placement rules. Stateless: derived from schedules. */
+  readonly space = new Space();
+  readonly phone: Phone;
+  readonly net: Net;
+  readonly employment: Employment;
+
   household: HouseholdState;
   investigation: InvestigationState;
   activeScene: IntimacyScene | null = null;
@@ -98,6 +114,29 @@ export class World {
     this.playerId = init.playerId;
     this.household = createHouseholdState();
     this.investigation = createInvestigation();
+    this.phone = new Phone(this.phoneAndNetDeps());
+    this.net = new Net(this.phoneAndNetDeps());
+    this.employment = new Employment();
+  }
+
+  /**
+   * The phone and the net read and write exactly the same world state, so they
+   * get the same dependencies. Deliberately narrow: neither can reach the
+   * economy or the investigation directly, because both of those refuse or
+   * record money and evidence, and a channel that can do that silently is a
+   * channel that will eventually bypass a rule.
+   */
+  private phoneAndNetDeps(): PhoneDeps & NetDeps {
+    return {
+      gate: this.gate,
+      relationships: this.relationships,
+      memories: this.memories,
+      npcs: this.npcs,
+      rng: this.rng,
+      now: () => this.clock.minutes,
+      log: (entry: LogInput) => this.logEntry(entry),
+      playerId: this.playerId,
+    };
   }
 
   static create(options: WorldOptions = {}): World {
@@ -143,6 +182,9 @@ export class World {
     world.log.push(...snapshot.log);
     world.logCounter = snapshot.logCounter;
     world.reputation = snapshot.reputation;
+    world.phone.restore(snapshot.phone);
+    world.net.restore(snapshot.net);
+    world.employment.restore(snapshot.employment);
     world.tiers = new Map(snapshot.tiers);
     world.tierRefreshedAt = snapshot.tierRefreshedAt;
 
@@ -206,6 +248,9 @@ export class World {
       memories: this.memories.snapshotItems(),
       memoryCounter: this.memories.snapshotCounter(),
       economy: this.economy.snapshot(),
+      employment: this.employment.snapshot(),
+      phone: this.phone.snapshot(),
+      net: this.net.snapshot(),
       household: this.household,
       investigation: this.investigation,
       cooldowns: this.events.cooldownEntries(),
@@ -285,6 +330,10 @@ export class World {
       this.activeScene.tick(this.rng);
       if (this.activeScene.isFinished) this.activeScene = null;
     }
+
+    this.phone.tick();
+    this.net.tick();
+    this.employment.tickMinute(this.clock, this.economy, (entry) => this.logEntry(entry));
 
     const resolution = this.events.tick(this.eventContext());
     if (resolution) {
@@ -371,6 +420,18 @@ export class World {
 
     this.relationships.decayDaily(minute);
     this.memories.decayDaily();
+    // Daily systems run at 00:00, so the day that just ended is `day - 1`.
+    const closingDay = day - 1;
+    if (closingDay >= 0) {
+      const closingWeekday = ((closingDay % 7) + 7) % 7;
+      this.employment.endOfDay(
+        closingDay,
+        closingWeekday,
+        this.clock.minutes,
+        this.economy,
+        (entry) => this.logEntry(entry),
+      );
+    }
 
     const net = this.economy.processDay(day, minute);
     if (net !== 0) {
@@ -395,6 +456,101 @@ export class World {
 
     this.player.stress = Math.max(0, Math.min(100, this.player.stress * 0.98));
     advanceInvestigation(this.investigation, 1, this.rng);
+  }
+
+  /**
+   * Characters whose home this is. Everyone else's schedule describes their own
+   * house, using the same generic room vocabulary — which is why residency, not
+   * the room id, decides who is actually here.
+   */
+  residents(): Npc[] {
+    const out: Npc[] = [];
+    for (const npc of this.npcs.values()) {
+      if (npc.homeLocation !== "elsewhere") out.push(npc);
+    }
+    return out;
+  }
+
+  /** Every resident currently on the property has a transform. Off-site does not. */
+  placements(): Placement[] {
+    return this.space.transforms(this.clock.minutes, this.residents());
+  }
+
+  occupants(): Map<LocationId, NpcId[]> {
+    return this.space.occupants(this.clock.minutes, this.residents());
+  }
+
+  /** The objective/ending inputs, read straight off the world. */
+  goalInput(): GoalInput {
+    const relationships = this.relationships
+      .all()
+      .filter((rel) => rel.a === this.playerId || rel.b === this.playerId)
+      .map((rel) => ({
+        familiarity: rel.axes.familiarity,
+        trust: rel.axes.trust,
+        friendship: rel.axes.friendship,
+      }));
+
+    return {
+      balance: this.economy.balance,
+      houseCondition: conditionScore(this.household),
+      heat: this.investigation.heat,
+      employed: this.employment.employed,
+      reputation: this.reputation,
+      day: dayIndex(this.clock),
+      relationships,
+    };
+  }
+
+  objectives(): Objective[] {
+    return evaluateObjectives(this.goalInput());
+  }
+
+  progress(): number {
+    return overallProgress(this.objectives());
+  }
+
+  /** Non-null once the run is decided. The simulation continues either way. */
+  ending(): Ending | null {
+    return evaluateEnding(this.goalInput());
+  }
+
+  /** The job board, filtered to what a person under house arrest could actually take. */
+  get jobMarket(): JobOffer[] {
+    return this.employment.employed ? [] : JOB_MARKET;
+  }
+
+  /**
+   * Taking a job rewrites the player's day. That is the whole point: the pay is
+   * not the feature, the *where* is. During a shift the spatial layer puts the
+   * player at the desk, and the phone stops finding them free.
+   */
+  takeJob(jobId: string): boolean {
+    const offer = JOB_MARKET.find((entry) => entry.id === jobId);
+    if (!offer) return false;
+    if (!this.employment.apply(jobId, (entry) => this.logEntry(entry))) return false;
+    this.player.schedule = scheduleForJob(offer);
+    this.player.occupation = offer.title;
+    return true;
+  }
+
+  quitJob(): void {
+    this.employment.quit((entry) => this.logEntry(entry));
+    this.player.schedule = idleSchedule();
+    this.player.occupation = "unemployed";
+  }
+
+  readPhone(npcId: NpcId): PhoneMessage[] {
+    const thread = this.phone.threads.find((entry) => entry.npcId === npcId);
+    return thread ? thread.messages.slice() : [];
+  }
+
+  feed(limit = 10): SocialPost[] {
+    return this.net.feed(limit);
+  }
+
+  share(kind: PostKind, body?: string): SocialPost {
+    return this.net.post(kind, body);
   }
 
   /**

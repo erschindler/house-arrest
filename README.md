@@ -4,8 +4,10 @@ A deterministic, adults-only life/crime simulation, built as two halves that mee
 the middle:
 
 - **`src/`** — a headless simulation core: persistent people, consequential
-  relationships, a live consent state machine, an injury model, content gating, and
-  a world that saves and restores exactly. No engine, no assets, zero dependencies.
+  relationships, a live consent state machine, an injury model, content gating, a
+  floorplan with transforms, a phone, a fictional internet, remote work, weighted
+  objectives and five endings, and a world that saves and restores exactly. No
+  engine, no assets, zero dependencies.
 - **`src/tools/`** — a pipeline that takes an asset library and an Unreal
   installation and produces a compile-ready UE5 project with every content class
   wired to a real asset.
@@ -251,9 +253,30 @@ registry and that two runs produce identical bytes.
 | 11 — household | `src/sim/household.ts` — dynamic issues, condition, contractor lead times |
 | 13 — economy | `src/sim/economy.ts` |
 | 14 — dynamic events | `src/sim/events.ts` — weighted candidates, cooldowns, gate filtering |
+| 8 — fictional internet | `src/sim/net.ts` — NPC feed, player posting, exposure, gated listings |
+| 9 — phone | `src/sim/phone.ts` — threads, failing calls, blocking, generated inbound |
+| 4/12 — space | `src/sim/space.ts` — 12-room floorplan, 40 anchors, occupancy, transforms |
+| 13/19 — work | `src/sim/jobs.ts` — six remote jobs, per-minute accrual, absences, firing |
+| progression | `src/sim/goals.ts` — six weighted objectives, five endings |
 | 15 / 18.6 — UE5 asset gating | `src/content/presentation.ts`, `src/tools/` |
 | dev testing preset | `src/content/presets.ts` |
 | 16/18.13/18.14 — determinism & saves | `src/core/rng.ts`, `src/save/serialize.ts`, `World.snapshot()` |
+
+## The five slices that closed the gap
+
+| Module | What it does | What it deliberately does not |
+| --- | --- | --- |
+| `space.ts` | A fixed 12-room floorplan with 40 mount points, occupancy derived from schedules, and `world.placements()` returning a transform per resident on the lot. | No navmesh, doors or pathfinding. Characters are *at* anchors, not walking between them. |
+| `phone.ts` | Threads, calls that fail for real reasons (asleep, mid-shift, blocked), and inbound messages generated from the relationship that would actually send them. | No branching dialogue. A message is a line, an effect and a memory. |
+| `net.ts` | An NPC feed derived from schedules and mood, player posting with real gating, an exposure score the investigation can read, and three abstract listings behind `darkThemes`. | Not a network. No real accounts, no virality model, no procedures described. |
+| `jobs.ts` | Six remote or on-property jobs, minute-accurate accrual, daily absence counting, firing on the third miss. | No career ladder, promotions or skill tree. |
+| `goals.ts` | Six weighted objectives read off world state, and five endings: arrest, eviction, condemnation, isolation, stable. | Not a quest system. It scores and concludes; it does not create content. |
+
+Taking a job rewrites the player's day, so the spatial layer puts them at the desk
+for the shift and the phone stops finding them free. That is the point of the
+slice: work is a *place*, not a timer. Placement consumes no randomness, so adding
+a room cannot shift a save's future — the anchor is chosen by hashing the
+character, the day and the schedule block.
 
 ## The three rules the engine enforces
 
@@ -277,7 +300,8 @@ registry and that two runs produce identical bytes.
 core/      rng (seeded, serializable)   clock
 content/   gate (toggles + hard invariants)   presentation (asset classes)   presets
 sim/       types, relationship, memory, needs, schedule, lod, kink, consent,
-           gossip, household, economy, events, world
+           gossip, household, economy, events, space, phone, net, jobs, goals,
+           world
 worldgen/  deterministic adult population + social graph
 save/      canonical, hashable snapshot
 tools/     requirements, library, resolver, ue5 (plugin emitter),
@@ -289,7 +313,8 @@ demo.ts    runnable tour
 
 ```
 clock → tier refresh → NPC needs/schedule → active scene beat (every 5m)
-      → event engine → contractor completion → (midnight) daily systems
+      → phone → net → work accrual → event engine → contractor completion
+      → (midnight) daily systems, closing out yesterday's shift and bills
 ```
 
 Tiers: `full` (on property, 1 min), `coarse` (nearby/expected, 15 min),
@@ -331,26 +356,30 @@ Removing the preset at ship time is three deletions, listed at the top of
   **state, gating and consequence** — the part that must be engine-side and
   unskippable. Presentation is a separate layer permitted to show only what the
   current state allows.
-- The fictional internet (§8), phone (§9), jobs and world expansion (§19). They sit
-  on the same world object and are the natural next slices.
+- A renderer, and a UE client. `world.placements()` produces transforms and
+  `space.ts` holds the floorplan a level must be built to; nothing draws either
+  yet.
 
 ## Next, in order
 
-1. **A spatial layer.** Rooms with bounds and anchors, NPC positions derived from
-   schedules, occupancy. There are no transforms yet, so there is nothing for UE to
-   place. This is the blocker before a UE client can show anything.
-2. **A golden-hash parity harness.** Record `world.hash()` for N seeds × durations
+1. **A golden-hash parity harness.** Record `world.hash()` for N seeds × durations
    from the TypeScript implementation, then require a C++ port to reproduce it
    exactly. Without an oracle, a port diverges silently.
-3. **Port in dependency order:** `rng → clock → world tick → schedule/needs/lod →
-   relationship/memory → consent → gate/registry`. Consent last to port and first to
-   parity-test: a subtle translation bug there is unacceptable, not merely annoying.
+2. **A UE client over the transforms.** `world.placements()` already returns a room,
+   an anchor and a position for every resident on the lot. The remaining work is a
+   subsystem that drives actors from it, over a level built to the `space.ts`
+   floorplan.
+3. **Port in dependency order:** `rng → clock → space → world tick →
+   schedule/needs/lod → relationship/memory → phone/net/jobs → consent →
+   gate/registry`. Consent last to port and first to parity-test: a subtle
+   translation bug there is unacceptable, not merely annoying.
 
 ---
 
 # 8. Status
 
-- Simulation core: 24 content classes, 11 kink categories, full save/load, deterministic.
+- Simulation core: 24 content classes, 11 kink categories, 12 rooms with 40 anchors,
+  6 jobs, 6 objectives, 5 endings, full save/load, deterministic. 114 tests.
 - Installer and pipeline: Node-side stages tested, generated artifacts asserted.
 - Generated C++, editor Python and engine invocations: **written, never executed**.
   No engine exists in this repository, so nothing in `ue/` has been compiled or run.

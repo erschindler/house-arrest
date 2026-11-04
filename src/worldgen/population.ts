@@ -137,6 +137,7 @@ export function createPlayerNpc(id: NpcId, rng: Rng): Npc {
   const npc = makeAdultNpc(rng, id, { occupation: "unemployed", age: 34 });
   npc.traits.push("under house arrest");
   npc.cash = 640;
+  npc.homeLocation = "masterBedroom";
   return npc;
 }
 
@@ -168,6 +169,12 @@ export function generatePopulation(options: PopulationOptions): PopulationResult
     if (family) store.markFamily(a, b);
     store.apply(a, b, delta, 0);
   };
+
+  // The two family members are the household: they live here. Everyone else has a
+  // home of their own, and their schedule describes it, not this house.
+  for (let i = 0; i < Math.min(2, npcs.length); i += 1) {
+    npcs[i].homeLocation = "guestBedroom";
+  }
 
   // Family: permanently non-romantic, high familiarity, real friction available.
   if (npcs.length >= 2) {

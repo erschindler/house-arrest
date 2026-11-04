@@ -144,7 +144,17 @@ export function blockAt(npc: Npc, clockMinutes: number): ScheduleBlock {
   return { startMinute: 0, endMinute: MINUTES_PER_DAY, activity: "home", location: "livingRoom" };
 }
 
+/**
+ * Whether this character is in *the player's* house right now.
+ *
+ * Room ids are generic (`masterBedroom`, `kitchen`), and the generated population
+ * uses the same vocabulary for their own homes. Without the residency check, every
+ * character in the city was "on the property" every night, which put eighty people
+ * in one bedroom and made every one of them a witness to anything that happened
+ * there. `homeLocation` is what distinguishes "a bedroom" from "your bedroom".
+ */
 export function isOnProperty(npc: Npc, clockMinutes: number): boolean {
+  if (npc.homeLocation === "elsewhere") return false;
   const location = blockAt(npc, clockMinutes).location;
   return HOUSE_LOCATIONS.includes(location);
 }
