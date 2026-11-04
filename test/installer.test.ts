@@ -68,9 +68,11 @@ test("the emitter writes a registry containing only permitted classes", () => {
   const dir = "artifacts/installer-test";
   const written = emitInstall(dir, report);
 
-  assert.ok(written.length >= 5);
+  assert.ok(written.length >= 8);
 
-  const registry = JSON.parse(readFileSync(join(dir, "HASContent/Data/HASAssetRegistry.json"), "utf8")) as {
+  const registry = JSON.parse(
+    readFileSync(join(dir, "Plugins/HASContent/Content/Data/HASAssetRegistry.json"), "utf8"),
+  ) as {
     entries: { assetClass: string; path: string; requires: unknown[] }[];
   };
   const classes = registry.entries.map((entry) => entry.assetClass);

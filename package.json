@@ -8,6 +8,8 @@
     "demo": "node src/demo.ts",
     "dev:demo": "node src/demo.ts --dev-unrestricted",
     "installer": "node src/tools/cli.ts",
+    "run": "node src/tools/run.ts",
+    "preflight": "node src/tools/run.ts --only preflight",
     "test": "node --test test/",
     "typecheck": "tsc --noEmit"
   }

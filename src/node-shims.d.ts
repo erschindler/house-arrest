@@ -16,3 +16,20 @@ declare module "node:path" {
   export function dirname(path: string): string;
   export function basename(path: string): string;
 }
+
+declare module "node:child_process" {
+  export type SpawnSyncOptions = {
+    cwd?: string;
+    env?: Record<string, string | undefined>;
+    stdio?: "inherit" | "pipe";
+  };
+
+  export type SpawnSyncResult = {
+    status: number | null;
+    stdout: string | null;
+    stderr: string | null;
+    error?: { message: string };
+  };
+
+  export function spawnSync(command: string, args: string[], options?: SpawnSyncOptions): SpawnSyncResult;
+}

@@ -1,2 +1,13 @@
 node_modules/
 artifacts/
+
+# Generated Unreal project (regenerate with `npm run run`)
+ue/
+*.sln
+*.suo
+*.VC.db
+.vs/
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
