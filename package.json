@@ -1,0 +1,12 @@
+{
+  "name": "house-arrest-sim-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Content-neutral, deterministic simulation core for HOUSE ARREST. Headless and engine-agnostic; ports to UE5.",
+  "scripts": {
+    "demo": "node src/demo.ts",
+    "test": "node --test test/",
+    "typecheck": "tsc --noEmit"
+  }
+}
