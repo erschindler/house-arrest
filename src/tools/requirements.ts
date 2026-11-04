@@ -176,6 +176,61 @@ add({
   acceptance: "Modular outfit with ≥2 LODs and cloth-friendly topology.",
 });
 
+add({
+  assetClass: "torture.room.interior",
+  kind: "prop",
+  keywords: ["basement", "interior", "concrete", "drain", "room"],
+  requiresLods: true,
+  maxTriangles: 250000,
+  animated: false,
+  searchTerms: ["abandoned basement interior ue5", "concrete utility room environment", "industrial washdown room"],
+  acceptance: "Modular interior with a floor drain, sealed walls and a ceiling light; ≥2 LODs.",
+});
+
+add({
+  assetClass: "torture.room.hiddenDoor",
+  kind: "prop",
+  keywords: ["hidden", "door", "secret", "concealed", "panel"],
+  requiresLods: true,
+  maxTriangles: 45000,
+  animated: false,
+  searchTerms: ["hidden door ue5", "secret bookcase door mesh", "concealed wall panel door"],
+  acceptance: "Door mesh plus a matching wall panel; a closed state that reads as wall; ≥2 LODs.",
+});
+
+add({
+  assetClass: "torture.instrument.set",
+  kind: "prop",
+  keywords: ["surgical", "instrument", "tool", "scalpel", "blade"],
+  requiresLods: true,
+  maxTriangles: 30000,
+  animated: false,
+  searchTerms: ["surgical instrument pack ue5", "vintage medical tools ue5", "butcher tool set"],
+  acceptance: "At least one mesh per TOOL_SPECS id; ≥2 LODs; no procedural blade geometry.",
+});
+
+add({
+  assetClass: "anatomy.detail.mesh",
+  kind: "mesh",
+  keywords: ["anatomy", "detailed", "body", "organ", "dissection"],
+  requiresLods: true,
+  maxTriangles: 250000,
+  animated: false,
+  searchTerms: ["anatomy body detailed ue5", "medical anatomy model ue5", "dissection body mesh"],
+  acceptance: "High-detail adult body with separable organ meshes and a matching skeleton; ≥3 LODs.",
+});
+
+add({
+  assetClass: "anatomy.cross.section",
+  kind: "material",
+  keywords: ["cross", "section", "anatomy", "layer", "tissue"],
+  requiresLods: false,
+  maxTriangles: 0,
+  animated: false,
+  searchTerms: ["anatomy cross section material", "layered flesh material ue5"],
+  acceptance: "Material with separate skin, fat, muscle, bone and organ masks.",
+});
+
 function kinkSpec(category: FetishCategory): AssetSpec {
   return {
     assetClass: `kink.prop.${category}`,

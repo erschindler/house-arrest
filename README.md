@@ -242,9 +242,15 @@ ue/HouseArrest/
   Scripts/has_import.py                 headless import of a Fab drop folder
   Scripts/has_verify.py                 asserts every registry path loads
   Scripts/has_build_hidden_room.py      seals the room and builds the concealed volume
-  Source/Systems/                       body, session, confinement, leverage, hidden room (C++)
+  Scripts/has_build_room_props.py       computer, phone, camera rig, rack, chair, drain, light
+  Source/Systems/                       session, confinement, leverage, hidden room (C++)
+  Source/Systems/HASPhysicsContactComponent.*  sweep -> wound; Wound, Dismemberment, Voice, Production
   Content/Data/HASAnatomy.csv           organ table: region, organ, bleed, lethality, death
   Content/Data/HASTools.csv             tool table: noise, precision, depth, pain, bleed, gore level
+  Content/Data/HASSurfaces.csv          region -> tissue depth, width, structures
+  Content/Data/HASGarments.csv          clothing coverage and tear resistance
+  Content/Data/HASVoiceCues.csv         cue -> condition -> asset class
+  Docs/ROOM_BUILD.md                    the room's props, controls and component contract
   Plugins/HASContent/
     HASContent.uplugin
     Source/HASContent/                  registry subsystem (C++)
@@ -264,7 +270,7 @@ because those classes are not in the file it loaded.
 
 **Automated, and tested:**
 
-- scanning a library index, matching all 24 content classes, ranking, rejecting with reasons
+- scanning a library index, matching all 29 content classes, ranking, rejecting with reasons
 - content-gating the match result so a disabled level cannot reach the engine registry
 - generating the plugin, the C++, the `.uproject`, the configs, the docs, the CSVs
 - generating the gameplay components, the anatomy/tool data tables and the room-build script
@@ -296,28 +302,171 @@ registry and that two runs produce identical bytes.
 
 ---
 
-# 4. First full run, in order
+# 4. Install, download, and the first full run
 
-1. Install UE 5.5 and Visual Studio 2022 with the C++ workload. Reboot if the
-   installer says so — a half-registered MSVC is the single most common first
-   failure.
-2. `git lfs install` (once per machine).
-3. Install Node 26.
-4. `npm run preflight -- --engine-root "C:/Program Files/Epic Games/UE_5.5"`. Fix
-   whatever it lists. This takes seconds and catches ~80% of first-run pain.
-5. Buy/claim the packs on Fab, then **download** them (Fab plugin → Add to Project,
-   or the web library → download → extract). Put the extracted folders anywhere.
-6. Point `--drop` at that folder and `--library` at a library index describing it.
-   If you have no index yet: run without `--drop` first. The pipeline will tell you
-   which classes it cannot find and print the exact Fab search terms for each.
-7. `npm run run -- --drop ... --engine-root ... --settings mature`.
-8. If `import` or `verify` fails, read the printed path and fix the index or the
-   pack — the pipeline stops rather than building something half-wired.
-9. Open `ue/HouseArrest/HouseArrest.uproject`. First open compiles shaders; that is
-   the 20-minute wait, not a hang.
-10. When you change content settings, re-run stages 3–5 only:
-    `npm run run -- --only preflight,content` after `--settings`, or just re-run the
-    whole thing — it is idempotent.
+## 4.1 What to install, exactly
+
+| # | Download | From | Version | Notes |
+| --- | --- | --- | --- | --- |
+| 1 | **Unreal Engine** | Epic Games Launcher → Unreal Engine → Library → **+** | **5.5** (5.4 works: `--engine 5.4`) | 60 GB, 110 GB+ with debug symbols. Install to a path with no spaces if you can. |
+| 2 | **Visual Studio 2022 Community** | visualstudio.microsoft.com | 17.10+ | Tick **Game development with C++**. That brings MSVC v143, the Windows 11 SDK and .NET. Without it the `build` stage fails on a missing `cl.exe`. |
+| 3 | **Node.js** | nodejs.org | **26** (22.6 minimum) | The repo runs TypeScript directly; there is no build step. |
+| 4 | **Git** | git-scm.com | any recent | |
+| 5 | **Git LFS** | git-lfs.com | any recent | `git lfs install` once per machine, before you commit any art. |
+| 6 | **Fab plugin** | Already inside UE: Edit → Plugins → search "Fab" → enable → restart | bundled | This is how packs are claimed and added to a project. |
+| 7 | **Your Epic account** | epicgames.com | — | Engine entitlement and every Fab purchase are tied to it. |
+| — | Optional: Blender 4.2+, Substance Painter, Reaper/Audacity | — | — | Only once art and audio become the bottleneck. |
+
+## 4.2 What the installer can and cannot fetch
+
+The installer **does not log into Epic or Fab, does not buy anything, and does not
+download a pack**. It has no credentials, no entitlement and no vendor API, and a
+script that clicked "buy" on your behalf would be a liability rather than a
+feature. That part is yours: claim the packs, download them, extract them.
+
+What the installer *does* call, in order:
+
+| Stage | Program it runs | What that program does |
+| --- | --- | --- |
+| `preflight` | itself | Checks Node, engine path, library path, drop folder. Fails before writing. |
+| `library` | itself | Reads every `*.json` in `--library`, sorted, into one index. |
+| `resolve` | itself | Matches each content class against the index under your settings, with reasons for every rejection. |
+| `content` | itself | Writes the `HASContent` plugin and the registry of *permitted* classes. |
+| `project` | itself | Writes the `.uproject`, targets, module, configs and every generated system/script. |
+| `import` | `UnrealEditor-Cmd.exe <uproject> -run=pythonscript -script=has_import.py` | Imports the extracted drop folder into `/Game/HASContent` and writes an index of what actually landed. |
+| `verify` | same editor, `has_verify.py` | Fails the run if any path in the registry does not load. |
+| `room` | same editor, `has_build_hidden_room.py` | Seals the room, builds the false wall, tags the volume. |
+| `props` | same editor, `has_build_room_props.py` | Places the computer, phone, camera rig, tool rack, chair, drain and light. |
+| `build` | `Engine/Build/BatchFiles/Build.bat HouseArrestEditor Win64 Development` | Compiles the game module and every component. |
+| `package` | `Engine/Build/BatchFiles/RunUAT.bat BuildCookRun` | Cooks, stages, paks and archives. |
+
+## 4.3 The packs to get for the room
+
+Search Fab with the terms below. These are the same strings the resolver's
+requirements carry (`src/tools/requirements.ts`); the acceptance column is what the
+installer actually checks, so a pack that fails it will be rejected with a reason
+rather than silently used.
+
+| Content class | Fab search terms | Acceptance test |
+| --- | --- | --- |
+| `torture.room.interior` | abandoned basement interior ue5 · concrete utility room environment · industrial washdown room | Modular interior with a floor drain, sealed walls and a ceiling light; ≥2 LODs. |
+| `torture.room.hiddenDoor` | hidden door ue5 · secret bookcase door mesh · concealed wall panel door | Door plus matching wall panel; closed state reads as wall; ≥2 LODs. |
+| `torture.instrument.set` | surgical instrument pack ue5 · vintage medical tools ue5 · butcher tool set | At least one mesh per tool id (scalpel, blade, pliers, saw, drill, brand, hammer, clamp, needle, chemical); ≥2 LODs. |
+| `anatomy.detail.mesh` | anatomy body detailed ue5 · medical anatomy model ue5 · dissection body mesh | High-detail adult body with separable organ meshes and a matching skeleton; ≥3 LODs. |
+| `anatomy.cross.section` | anatomy cross section material · layered flesh material ue5 | Material with separate skin/fat/muscle/bone/organ masks. |
+| `gore.blood.decal` | blood decal pack ue5 · blood splatter material decal · forensic blood pool decal | Deferred decal or material-decal pair; surface and cloth projection; ≤5k triangles. |
+| `gore.wound.layer` | layered wound material ue5 · flesh wound master material | Master material with per-layer masks. |
+| `gore.organ.decal` | gore organ decal ue5 · anatomical gore decal pack | Extreme-level tissue decals, separable from the standard blood set. |
+| `gore.dismemberment` | dismemberment limbs ue5 · severed limb static meshes · stump cap mesh | Separable limb meshes with stump caps; ≥2 LODs; matching skeleton. |
+| `body.nudity.full` | anatomical full body mesh ue5 · nude base mesh metahuman compatible | Full anatomical base; ≥3 LODs; matched to the character skeleton. |
+| `body.nudity.partial` | anatomical body base mesh ue5 · underwear body base | Base body with underwear shell; ≥2 LODs. |
+| `violence.torture.sequence` | restraint sequence animation ue5 · prolonged distress animation set | Sustained sequences with looping distress idles. |
+| `death.agony.animation` | dying animation ue5 · death agony motion capture · collapsed breathing animation | Drawn-out dying performance, no fade-out; blends to ragdoll. |
+
+Two practical warnings. **Licences are per account and per pack**: some Fab packs are
+personal-use only, and a class resolving does not mean it is licensed for a build
+you distribute. **Adult anatomy is scarce and heavily verified**: expect age checks,
+and expect several classes to have no acceptable asset at all. The resolver will
+name them; the game runs with those classes absent rather than with a substitute.
+
+Voice sets are not a resolver class yet. `UHASVoiceComponent` expects a male and a
+female `FHASVoiceSet` assigned in a Blueprint or data asset; buy or record those
+separately and assign them after the first build.
+
+## 4.4 Put the files where the installer can read them
+
+1. Claim the packs on Fab.
+2. Download them. The Fab plugin's **Add to Project** puts content straight into
+   `Content/`; the web library gives you a zip. For this pipeline, prefer the zip.
+3. Extract every zip into one flat folder, e.g. `D:/Fab`, so each pack is its own
+   subfolder. **The import script walks files; it does not unpack archives**, and it
+   ignores nested zips. If `--drop` contains only `.zip` files, `import` will
+   "succeed" with nothing imported.
+
+## 4.5 Write the library index
+
+The installer matches against JSON, not against the disk. One file per pack, any
+filenames, all `*.json` in the folder are read in sorted order:
+
+```json
+{
+  "pack": "Fab — Practical Effects Vol.1",
+  "assets": [
+    {
+      "id": "/Game/Fab/PracticalFX/SM_BloodPool_A",
+      "name": "Blood Pool A",
+      "kind": "decal",
+      "tags": ["blood", "pool", "decal"],
+      "triangles": 1800,
+      "lods": 2,
+      "animated": false,
+      "license": "Fab Standard"
+    }
+  ]
+}
+```
+
+`kind` must be one of `mesh`, `material`, `decal`, `animation`, `prop`. `id` is the
+Unreal soft path. `fixtures/library/` contains three complete examples.
+
+You do not have to get the index perfect first. Run once with no `--drop`: the
+resolver prints every class it cannot fill and the exact search terms for each, and
+writes `Docs/IMPORT_CHECKLIST.csv`. After a successful import, the pipeline
+re-resolves against what *actually landed in the engine* and rewrites the registry,
+so a pack whose asset is named `SM_BloodPool_02` rather than `SM_BloodPool_A` still
+ends up wired to the real path.
+
+## 4.6 Run it
+
+```bash
+# 1. Get the code
+git clone https://github.com/erschindler/house-arrest.git
+cd house-arrest
+
+# 2. Check the machine before anything is written
+npm run preflight -- --engine-root "C:/Program Files/Epic Games/UE_5.5"
+
+# 3. See the plan without executing it
+npm run run -- --dry-run
+
+# 4. Offline: generate the project, plugin, components and the gap report
+npm run run -- --library fixtures/library --settings dev
+
+# 5. Full run: import your extracted packs, build the room, compile
+npm run run -- \
+  --library "D:/FabLibrary" \
+  --drop "D:/Fab" \
+  --engine-root "C:/Program Files/Epic Games/UE_5.5" \
+  --settings dev \
+  --project ue/HouseArrest
+```
+
+`--settings dev` is required for this content: it is the only preset that permits
+extreme violence, full nudity and dark themes. It raises content limits only; the
+adults-only rule, the family prohibition and live consent are code and have no
+setting to turn off.
+
+If `import` or `verify` fails, the run stops and prints the path it could not
+resolve. Fix the index or the pack and re-run; the pipeline is idempotent.
+
+## 4.7 What you should see
+
+- **In the terminal, immediately:** `npm run demo` prints the whole simulation,
+  including the room, the officer recruitment, the session and the cautery. That
+  works with no engine at all.
+- **After stage 5:** `ue/HouseArrest/` containing the `.uproject`, `Source/Systems/`
+  with 22 generated C++ files, five CSVs, four editor scripts (two room scripts,
+  import, verify), and `Plugins/HASContent/` with the registry.
+- **After `room` and `props`:** a level whose concealed volume is tagged
+  `HAS.HiddenRoom` and whose props are tagged `HAS.RoomProp.*` — grey boxes at the
+  anchors, because no meshes have been assigned yet.
+- **After `build`:** a compiled `HouseArrestEditor`. The first compile is where the
+  generated C++ meets the real API; expect to fix an include or a signature.
+
+This is not yet a playable third-person demo. The room, its props and the components
+exist and compile, but there is no player pawn, no input mapping and no UI wired to
+them: the components are the contract, not the game. Section 8 lists that wiring as
+the next step. Do not expect to walk around on the first build.
 
 ## Troubleshooting the first run
 
@@ -513,7 +662,7 @@ Removing the preset at ship time is three deletions, listed at the top of
 
 # 8. Status
 
-- Simulation core: 24 content classes, 11 kink categories, 12 rooms with 40 anchors,
+- Simulation core: 29 content classes, 11 kink categories, 12 rooms with 40 anchors,
   6 jobs, 7 objectives, 6 endings, confinement, leverage, a concealed room, custody,
   an organ-level trauma model and a contact/blood/clothing layer. Full save/load,
   deterministic. 156 tests.

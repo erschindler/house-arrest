@@ -1,0 +1,45 @@
+{
+  "pack": "Fab — Concealed Room Kit",
+  "assets": [
+    {
+      "id": "/Game/Fab/ConcealedRoom/SM_BasementInterior",
+      "name": "Basement Interior Shell",
+      "kind": "prop",
+      "tags": ["basement", "interior", "concrete", "drain", "room", "washdown"],
+      "triangles": 118000,
+      "lods": 3,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/ConcealedRoom/SM_HiddenDoor_Panel",
+      "name": "Concealed Door Panel",
+      "kind": "prop",
+      "tags": ["hidden", "door", "secret", "concealed", "panel", "wall"],
+      "triangles": 24000,
+      "lods": 2,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/ConcealedRoom/SM_SurgicalSet",
+      "name": "Surgical Instrument Set",
+      "kind": "prop",
+      "tags": ["surgical", "instrument", "tool", "scalpel", "blade", "saw", "drill", "pliers", "clamp"],
+      "triangles": 19000,
+      "lods": 2,
+      "animated": false,
+      "license": "Fab Standard"
+    },
+    {
+      "id": "/Game/Fab/ConcealedRoom/SM_RestraintChair",
+      "name": "Restraint Chair",
+      "kind": "prop",
+      "tags": ["chair", "restraint", "furniture", "straps"],
+      "triangles": 14000,
+      "lods": 2,
+      "animated": false,
+      "license": "Fab Standard"
+    }
+  ]
+}
