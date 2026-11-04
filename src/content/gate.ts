@@ -47,9 +47,12 @@ export const FETISH_LABELS: Record<FetishCategory, string> = {
 
 export type SexualContent = "off" | "suggestive" | "explicit";
 export type ViolenceLevel = "standard" | "graphic" | "extreme";
+/** Nudity is its own axis: being undressed is not the same content as intimacy. */
+export type NudityLevel = "off" | "implied" | "full";
 
 export type ContentSettings = {
   sexual: SexualContent;
+  nudity: NudityLevel;
   violence: ViolenceLevel;
   darkThemes: boolean;
   fetishes: Partial<Record<FetishCategory, boolean>>;
@@ -57,6 +60,7 @@ export type ContentSettings = {
 
 export type ContentTag =
   | { kind: "sexual"; level: "suggestive" | "explicit" }
+  | { kind: "nudity"; level: "partial" | "full" }
   | { kind: "violence"; level: "graphic" | "extreme" }
   | { kind: "dark" }
   | { kind: "fetish"; category: FetishCategory; intensity: number };
@@ -67,6 +71,7 @@ export function createDefaultSettings(): ContentSettings {
   // Everything opt-in. A new save starts at the most conservative legal state.
   return {
     sexual: "off",
+    nudity: "off",
     violence: "standard",
     darkThemes: false,
     fetishes: {},
@@ -74,6 +79,7 @@ export function createDefaultSettings(): ContentSettings {
 }
 
 const SEXUAL_RANK: Record<SexualContent, number> = { off: 0, suggestive: 1, explicit: 2 };
+const NUDITY_RANK: Record<NudityLevel, number> = { off: 0, implied: 1, full: 2 };
 const VIOLENCE_RANK: Record<ViolenceLevel, number> = { standard: 0, graphic: 1, extreme: 2 };
 
 export function normalizeSettings(partial: Partial<ContentSettings> | undefined): ContentSettings {
@@ -81,6 +87,7 @@ export function normalizeSettings(partial: Partial<ContentSettings> | undefined)
   if (!partial) return base;
   const settings: ContentSettings = {
     sexual: partial.sexual ?? base.sexual,
+    nudity: partial.nudity ?? base.nudity,
     violence: partial.violence ?? base.violence,
     darkThemes: partial.darkThemes ?? base.darkThemes,
     fetishes: { ...base.fetishes, ...(partial.fetishes ?? {}) },
@@ -91,6 +98,7 @@ export function normalizeSettings(partial: Partial<ContentSettings> | undefined)
 
 export function assertSettingsValid(settings: ContentSettings): void {
   if (!(settings.sexual in SEXUAL_RANK)) throw new Error(`invalid sexual setting: ${settings.sexual}`);
+  if (!(settings.nudity in NUDITY_RANK)) throw new Error(`invalid nudity setting: ${settings.nudity}`);
   if (!(settings.violence in VIOLENCE_RANK)) throw new Error(`invalid violence setting: ${settings.violence}`);
   for (const category of Object.keys(settings.fetishes) as FetishCategory[]) {
     if (!FETISH_CATEGORIES.includes(category)) throw new Error(`unknown fetish category: ${category}`);
@@ -122,6 +130,10 @@ export class ContentGate {
     return SEXUAL_RANK[this.current.sexual];
   }
 
+  nudityRank(): number {
+    return NUDITY_RANK[this.current.nudity];
+  }
+
   violenceRank(): number {
     return VIOLENCE_RANK[this.current.violence];
   }
@@ -130,6 +142,8 @@ export class ContentGate {
     switch (tag.kind) {
       case "sexual":
         return tag.level === "suggestive" ? this.sexualRank() >= 1 : this.sexualRank() >= 2;
+      case "nudity":
+        return tag.level === "partial" ? this.nudityRank() >= 1 : this.nudityRank() >= 2;
       case "violence":
         return this.violenceRank() >= VIOLENCE_RANK[tag.level];
       case "dark":
@@ -156,6 +170,7 @@ export class ContentGate {
     const fetishes = FETISH_CATEGORIES.filter((c) => this.current.fetishes[c] === true).map((c) => FETISH_LABELS[c]);
     return [
       `sexual: ${this.current.sexual}`,
+      `nudity: ${this.current.nudity}`,
       `violence: ${this.current.violence}`,
       `dark themes: ${this.current.darkThemes ? "on" : "off"}`,
       `kink categories: ${fetishes.length === 0 ? "none" : fetishes.join(", ")}`,

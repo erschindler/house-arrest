@@ -18,7 +18,7 @@ import { advanceClock, createClock, dayIndex, minuteOfDay } from "../core/clock.
 import type { Clock } from "../core/clock.ts";
 import { createRng } from "../core/rng.ts";
 import type { Rng } from "../core/rng.ts";
-import { hashSnapshot } from "../save/serialize.ts";
+import { SNAPSHOT_VERSION, hashSnapshot } from "../save/serialize.ts";
 import type { WorldSnapshot } from "../save/serialize.ts";
 import { createPlayerNpc, generatePopulation } from "../worldgen/population.ts";
 import { IntimacyScene } from "./consent.ts";
@@ -30,6 +30,12 @@ import { spreadRumor } from "./gossip.ts";
 import type { GossipDeps } from "./gossip.ts";
 import { ISSUE_LIBRARY, completeContractorWork, conditionScore, createHouseholdState, dailyHouseholdTick } from "./household.ts";
 import type { HouseholdState } from "./household.ts";
+import { advanceInjury } from "./injury.ts";
+import { advanceInvestigation, createInvestigation, recordEvidence, recordWitness } from "./investigation.ts";
+import type { InvestigationState } from "./investigation.ts";
+import { applyPsyche, resolveAssault } from "./violence.ts";
+import type { AssaultOutcome } from "./violence.ts";
+import type { WeaponKind } from "./anatomy.ts";
 import { TIER_INTERVAL_MINUTES, assignTiers, countTiers } from "./lod.ts";
 import type { SimTier, TierAssignment } from "./lod.ts";
 import { MemoryStore } from "./memory.ts";
@@ -71,6 +77,7 @@ export class World {
   readonly log: GameEventLogEntry[] = [];
 
   household: HouseholdState;
+  investigation: InvestigationState;
   activeScene: IntimacyScene | null = null;
   reputation = 0;
 
@@ -90,6 +97,7 @@ export class World {
     this.events = new EventEngine(builtinEvents(), 180, 0.45);
     this.playerId = init.playerId;
     this.household = createHouseholdState();
+    this.investigation = createInvestigation();
   }
 
   static create(options: WorldOptions = {}): World {
@@ -130,6 +138,7 @@ export class World {
     world.rng.setState(snapshot.rng);
     world.clock.minutes = snapshot.clockMinutes;
     world.household = snapshot.household;
+    world.investigation = snapshot.investigation;
     world.events.restoreCooldowns(snapshot.cooldowns);
     world.log.push(...snapshot.log);
     world.logCounter = snapshot.logCounter;
@@ -186,7 +195,7 @@ export class World {
 
   snapshot(): WorldSnapshot {
     return {
-      version: 1,
+      version: SNAPSHOT_VERSION,
       seed: this.seed,
       rng: this.rng.getState(),
       clockMinutes: this.clock.minutes,
@@ -198,6 +207,7 @@ export class World {
       memoryCounter: this.memories.snapshotCounter(),
       economy: this.economy.snapshot(),
       household: this.household,
+      investigation: this.investigation,
       cooldowns: this.events.cooldownEntries(),
       log: this.log,
       logCounter: this.logCounter,
@@ -330,6 +340,28 @@ export class World {
       const target = Math.max(0, Math.min(100, (100 - needComfortIndex(npc)) * 0.75));
       const pull = 1 - Math.exp(-0.8 * dayFraction);
       npc.stress = Math.max(0, Math.min(100, npc.stress + (target - npc.stress) * pull));
+
+      const injury = advanceInjury(npc.injury, elapsedMinutes, this.clock.minutes);
+      if (injury.died) {
+        npc.alive = false;
+        this.logEntry({
+          kind: "death",
+          summary: `${npc.givenName} ${npc.familyName} died of ${npc.injury.causeOfDeath ?? "their injuries"}.`,
+          participants: [npc.id],
+          gated: true,
+        });
+        this.memories.add({
+          atMinute: this.clock.minutes,
+          kind: "violence",
+          summary: `${npc.givenName} ${npc.familyName} died.`,
+          participants: [npc.id, this.playerId],
+          tags: ["death"],
+          salience: 1,
+          valence: -1,
+        });
+        // A death is discoverable evidence, attributable to whoever caused it.
+        recordEvidence(this.investigation, "body", npc.injury.attributedTo ?? npc.id, this.clock.minutes);
+      }
     }
   }
 
@@ -362,5 +394,53 @@ export class World {
     }
 
     this.player.stress = Math.max(0, Math.min(100, this.player.stress * 0.98));
+    advanceInvestigation(this.investigation, 1, this.rng);
+  }
+
+  /**
+   * Resolve an assault and record everything it implies: the wound, the
+   * attacker's state of mind, physical evidence, whoever was in the house to see
+   * it, and the log entry the rest of the world reacts to.
+   */
+  assault(attackerId: NpcId, victimId: NpcId, weapon: WeaponKind): AssaultOutcome {
+    const attacker = this.npcs.get(attackerId);
+    const victim = this.npcs.get(victimId);
+    if (!attacker || !victim) throw new Error("unknown participant");
+
+    const outcome = resolveAssault(this.gate, this.rng, attacker, victim, weapon, this.clock.minutes);
+
+    if (outcome.victimWoundId) {
+      applyPsyche(attacker, victim, outcome.victimDied ? 1 : 0.6);
+      this.memories.add({
+        atMinute: this.clock.minutes,
+        kind: "violence",
+        summary: outcome.summary,
+        participants: [attackerId, victimId],
+        tags: ["violence"],
+        salience: 0.95,
+        valence: -0.9,
+      });
+      recordEvidence(this.investigation, "blood", attackerId, this.clock.minutes);
+
+      for (const npc of this.npcs.values()) {
+        if (npc.id === attackerId || npc.id === victimId || !npc.alive) continue;
+        if (!isOnProperty(npc, this.clock.minutes)) continue;
+        recordWitness(this.investigation, npc.id, this.clock.minutes, 0.3 + npc.personality.openness * 0.4);
+      }
+
+      if (outcome.victimDied) {
+        recordEvidence(this.investigation, "body", attackerId, this.clock.minutes);
+        victim.alive = false;
+        victim.injury.alive = false;
+      }
+    }
+
+    this.logEntry({
+      kind: "violence",
+      summary: outcome.summary,
+      participants: [attackerId, victimId],
+      gated: outcome.gated,
+    });
+    return outcome;
   }
 }

@@ -6,6 +6,7 @@
   "description": "Content-neutral, deterministic simulation core for HOUSE ARREST. Headless and engine-agnostic; ports to UE5.",
   "scripts": {
     "demo": "node src/demo.ts",
+    "dev:demo": "node src/demo.ts --dev-unrestricted",
     "test": "node --test test/",
     "typecheck": "tsc --noEmit"
   }

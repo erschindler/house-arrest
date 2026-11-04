@@ -8,6 +8,10 @@
  * consequence, which is what the engine actually has to guarantee.
  */
 
+import { ContentGate, assertHardInvariants } from "./content/gate.ts";
+import { PresentationGate, UE5_ASSET_MANIFEST } from "./content/presentation.ts";
+import type { AssetClass } from "./content/presentation.ts";
+import { devUnrestrictedSettings } from "./content/presets.ts";
 import { formatClock } from "./core/clock.ts";
 import { deserializeWorld, serializeWorld } from "./save/serialize.ts";
 import { World } from "./sim/world.ts";
@@ -236,13 +240,59 @@ function scenarioPerformance(): void {
   line("moods drift. The tier only controls how often the same functions run.");
 }
 
+function scenarioContentFramework(devMode: boolean): void {
+  banner("5. CONTENT FRAMEWORK FOR UE5 ASSETS");
+
+  const baseline = new PresentationGate(new ContentGate());
+  const unrestricted = new PresentationGate(new ContentGate(devUnrestrictedSettings()));
+
+  line(`manifest entries: ${UE5_ASSET_MANIFEST.length}`);
+  line(`loadable at default settings: ${baseline.available().length}`);
+  line(`loadable with the dev preset ${devMode ? "(active)" : "(inactive — pass --dev-unrestricted)"}: ${unrestricted.available().length}`);
+  line();
+  line("per asset class               default   all-limits-off");
+
+  const probe: AssetClass[] = [
+    "gore.blood.decal",
+    "gore.organ.decal",
+    "gore.dismemberment",
+    "violence.torture.sequence",
+    "death.agony.animation",
+    "body.nudity.full",
+    "intimacy.animation.explicit",
+    "kink.prop.bondage",
+  ];
+  for (const assetClass of probe) {
+    const left = baseline.allows(assetClass) ? "on" : "off";
+    const right = unrestricted.allows(assetClass) ? "on" : "off";
+    line(`  ${assetClass.padEnd(28)}  ${left.padEnd(8)}  ${right}`);
+  }
+
+  line();
+  line("The dev preset raises content limits only. These are code, not settings:");
+  for (const subject of [
+    { id: "minor", age: 17, isMinor: true },
+    { id: "relative", age: 41, isMinor: false, isFamilyOfPlayer: true },
+  ]) {
+    try {
+      assertHardInvariants(subject, "sexual");
+      line(`  BUG: ${subject.id} was allowed through`);
+    } catch (error) {
+      line(`  blocked: ${(error as Error).message}`);
+    }
+  }
+}
+
 function main(): void {
+  const devMode = process.argv.includes("--dev-unrestricted");
+
   line("HOUSE ARREST — simulation core");
   line("Headless, deterministic, content-neutral. No explicit text is produced.");
   scenarioMain();
   scenarioConsent();
   scenarioSaveLoad();
   scenarioPerformance();
+  scenarioContentFramework(devMode);
   line();
   line("Done.");
 }

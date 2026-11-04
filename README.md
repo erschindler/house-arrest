@@ -27,6 +27,9 @@ npm run typecheck  # tsc --noEmit
 | 11 — household | `src/sim/household.ts` — dynamic issues, condition, contractor lead times |
 | 13 — economy | `src/sim/economy.ts` |
 | 14 — dynamic events | `src/sim/events.ts` — weighted candidates, cooldowns, gate filtering |
+| 7 — injury, violence, investigation | `src/sim/anatomy.ts`, `injury.ts`, `violence.ts`, `investigation.ts` |
+| 15 / 18.6 — UE5 asset gating | `src/content/presentation.ts` — asset-class manifest filtered by the gate |
+| dev testing preset | `src/content/presets.ts` — all content limits at maximum |
 | 16/18.13/18.14 — determinism & saves | `src/core/rng.ts`, `src/save/serialize.ts`, `World.snapshot()` |
 
 ## The three rules the engine enforces
@@ -68,6 +71,26 @@ Tiers: `full` (on property, 1 min), `coarse` (nearby/expected, 15 min),
 `statistical` (the rest of the city, 720 min). All tiers run the same schedule and
 need functions, so an off-screen character's state reflects the time that passed.
 Nothing is ever "spawned on demand".
+
+## Testing with every content limit off
+
+```bash
+npm run dev:demo        # or: npm run demo -- --dev-unrestricted
+```
+
+This selects the `devUnrestricted` preset: explicit sexual content, full nudity,
+extreme violence, dark themes, and all eleven kink categories — every asset class
+in the manifest becomes loadable.
+
+**What the preset is:** a `ContentSettings` object. **What it is not:** a switch for
+the hard invariants. The adults-only rule, the family prohibition and live consent
+are implemented in `assertHardInvariants`, `RelationshipStore.markFamily` and the
+consent state machine — code with no configuration input — so there is nothing for
+the preset to turn off. `test/presentation.test.ts` asserts this under the preset
+itself rather than taking it on trust.
+
+Removing the preset at ship time is three deletions, listed at the top of
+`src/content/presets.ts`; nothing else references it.
 
 ## Deliberately not here
 

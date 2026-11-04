@@ -4,6 +4,7 @@
  */
 
 import type { FetishCategory } from "../content/gate.ts";
+import type { AppearanceState, InjuryState } from "./anatomy.ts";
 
 export type NpcId = string;
 export type LocationId = string;
@@ -82,6 +83,12 @@ export type Npc = {
   traits: string[];
   lastSimulatedMinute: number;
   alive: boolean;
+  /** Clothing state. What may be *shown* of it is decided by the content gate. */
+  appearance: AppearanceState;
+  /** Layered wounds, blood volume, shock and dying state (Section 7). */
+  injury: InjuryState;
+  /** 0..100 emotional detachment; rises with sustained cruelty (Section 7). */
+  detachment: number;
 };
 
 export type MemoryKind =

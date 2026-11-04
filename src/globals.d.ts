@@ -11,6 +11,7 @@ declare const console: {
 declare const process: {
   stdout: { write(chunk: string): void };
   exit(code?: number): void;
+  argv: string[];
 };
 
 declare const performance: {

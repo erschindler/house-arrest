@@ -11,6 +11,7 @@ import { FETISH_CATEGORIES } from "../content/gate.ts";
 import type { FetishCategory } from "../content/gate.ts";
 import { shuffled } from "../core/rng.ts";
 import type { Rng } from "../core/rng.ts";
+import { createInjuryState } from "../sim/injury.ts";
 import { createNeedsBaseline } from "../sim/needs.ts";
 import { RelationshipStore, defaultAxes, keyFor } from "../sim/relationship.ts";
 import type { Relationship, RelationshipDelta } from "../sim/relationship.ts";
@@ -124,6 +125,9 @@ export function makeAdultNpc(rng: Rng, id: NpcId, options: AdultNpcOptions = {})
     traits: [rng.pick(TRAITS), rng.pick(TRAITS)].filter((value, index, all) => all.indexOf(value) === index),
     lastSimulatedMinute: 0,
     alive: true,
+    appearance: { dress: "dressed" },
+    injury: createInjuryState(),
+    detachment: 0,
   };
 
   return npc;
