@@ -54,12 +54,19 @@ const OCCUPATIONS: Record<string, { work: OccupationTemplate; wealth: number }> 
   cleaner: { work: { activity: "work", location: "workplace", startHour: 8, endHour: 15 }, wealth: 0.6 },
   realEstateAgent: { work: { activity: "work", location: "workplace", startHour: 9, endHour: 18 }, wealth: 1.4 },
   therapist: { work: { activity: "work", location: "workplace", startHour: 10, endHour: 19 }, wealth: 1.5 },
+  // Police are a normal occupation here on purpose: they are people with schedules,
+  // not a special encounter. What makes them useful as accomplices is what the
+  // job lets them do afterwards, not a different recruitment mechanic.
+  policeOfficer: { work: { activity: "work", location: "workplace", startHour: 7, endHour: 19 }, wealth: 1.05 },
   retired: { work: { activity: "leisure", location: "livingRoom", startHour: 10, endHour: 14 }, wealth: 1.2 },
   unemployed: { work: { activity: "home", location: "livingRoom", startHour: 11, endHour: 16 }, wealth: 0.4 },
   student: { work: { activity: "appointment", location: "elsewhere", startHour: 9, endHour: 15 }, wealth: 0.5 },
 };
 
-export const OCCUPATION_KEYS = Object.keys(OCCUPATIONS);
+// Police are deliberately not in the random pool: they are assigned, not rolled.
+// Keeping them out of this array also keeps population generation's rng draws
+// identical to what they were before the branch was added.
+export const OCCUPATION_KEYS = Object.keys(OCCUPATIONS).filter((key) => key !== "policeOfficer");
 
 export function occupationWealth(occupation: string): number {
   return OCCUPATIONS[occupation]?.wealth ?? 1;

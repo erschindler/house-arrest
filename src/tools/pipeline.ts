@@ -21,6 +21,7 @@ export type StageId =
   | "project"
   | "import"
   | "verify"
+  | "room"
   | "build"
   | "package";
 
@@ -32,6 +33,7 @@ export const STAGE_ORDER: StageId[] = [
   "project",
   "import",
   "verify",
+  "room",
   "build",
   "package",
 ];
@@ -44,6 +46,7 @@ const LABELS: Record<StageId, string> = {
   project: "scaffold the Unreal project",
   import: "import the drop folder inside Unreal",
   verify: "confirm every registered path exists in the engine",
+  room: "build the concealed room in the level",
   build: "compile the editor target",
   package: "cook and package a build",
 };
@@ -106,7 +109,7 @@ export type PlannedStage = {
   skipReason: string | null;
 };
 
-const ENGINE_STAGES: StageId[] = ["import", "verify", "build", "package"];
+const ENGINE_STAGES: StageId[] = ["import", "verify", "room", "build", "package"];
 
 export function planStages(options: RunOptions): PlannedStage[] {
   const tools = options.engineRoot ? engineTools(options.engineRoot, options.platform) : null;
@@ -152,6 +155,21 @@ export function planStages(options: RunOptions): PlannedStage[] {
           uproject,
           "-run=pythonscript",
           `-script=${join(scripts, "has_verify.py")}`,
+          "-unattended",
+          "-nopause",
+          "-nosplash",
+        ],
+      };
+    }
+
+    if (id === "room" && tools) {
+      return {
+        ...planned,
+        command: [
+          tools.editor,
+          uproject,
+          "-run=pythonscript",
+          `-script=${join(scripts, "has_build_hidden_room.py")}`,
           "-unattended",
           "-nopause",
           "-nosplash",

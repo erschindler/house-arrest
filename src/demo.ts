@@ -17,6 +17,8 @@ import { deserializeWorld, serializeWorld } from "./save/serialize.ts";
 import { World } from "./sim/world.ts";
 import { conditionScore } from "./sim/household.ts";
 import { describeObjectives } from "./sim/goals.ts";
+import { BUILD_ORDER } from "./sim/facility.ts";
+import { describeSession, survivalEstimate } from "./sim/torture.ts";
 import { needComfortIndex } from "./sim/needs.ts";
 
 function line(text = ""): void {
@@ -332,6 +334,106 @@ function scenarioSystems(): void {
   line("Placement consumes no randomness: adding a room cannot shift the save's future.");
 }
 
+function scenarioPredation(): void {
+  banner("7. CONFINEMENT, LEVERAGE, AND THE ROOM");
+
+  const world = World.create({
+    seed: "predation-demo",
+    npcCount: 60,
+    settings: { violence: "extreme", darkThemes: true, nudity: "full" },
+  });
+
+  line(`confinement: ${world.confinement.describe()}`);
+
+  const approach = world.approachDoor(1, 0.2);
+  line(`the door: ${approach.summary}`);
+
+  line();
+  line("the room — a stage at a time, each one with a contractor attached:");
+  world.economy.balance = 20000; // demo float; in play this is earned
+  if (!world.chooseHiddenRoom("basement")) throw new Error("could not choose the basement");
+
+  for (const stage of BUILD_ORDER) {
+    const started = world.beginBuild(stage);
+    if (!started.ok) {
+      line(`  ${stage}: ${started.reason}`);
+      continue;
+    }
+    let guard = 0;
+    while (world.facility.activeProject && guard < 240) {
+      world.tick(60);
+      guard += 1;
+    }
+    line(
+      `  ${stage}: done — concealment ${Math.round(world.facility.concealment)}, ` +
+        `sound ${Math.round(world.facility.soundRating)}`,
+    );
+  }
+  line(`room: ${world.facility.describe()}`);
+
+  line();
+  const officer = [...world.npcs.values()].find((npc) => world.assess(npc.id).police);
+  if (!officer) throw new Error("no officer generated");
+  const assessment = world.assess(officer.id);
+  line(`officer: ${officer.givenName} ${officer.familyName}, ${officer.occupation}`);
+  line(`  resistance ${Math.round(assessment.resistance)}, strongest lever ${assessment.best}`);
+  for (const vector of assessment.leverage.slice(0, 3)) {
+    line(`  ${vector.kind}: ${Math.round(vector.strength)} — ${vector.detail}`);
+  }
+
+  const lever = assessment.best ?? "threat";
+  line(`  pressing: ${lever}`);
+
+  let recruited = { ok: false, reason: "" };
+  for (let attempt = 0; attempt < 12 && !recruited.ok; attempt += 1) {
+    const press = world.press(officer.id, lever);
+    line(`  press ${attempt + 1}: compliance ${Math.round(press.compliance * 100)}%`);
+    recruited = world.recruit(officer.id, "badge");
+  }
+  line(`  recruited: ${recruited.ok ? "yes" : `no — ${recruited.reason}`}`);
+
+  if (recruited.ok) {
+    world.investigation.heat = 40;
+    const cover = world.order(officer.id, "coverTracks");
+    line(`  cover-up: ${cover.ok ? cover.summary : `refused — ${cover.summary}`}`);
+    line(`  heat: 40 -> ${Math.round(world.investigation.heat)}`);
+
+    const delivery = world.order(officer.id, "deliverVictim");
+    line(`  delivery: ${delivery.summary}`);
+  }
+
+  const captive = world.custody.list()[0];
+  line();
+  if (!captive) {
+    line("nobody was delivered; the room stays empty.");
+    return;
+  }
+
+  world.beginSession(captive.npcId, "undressed");
+  const cut = world.tortureAct({ kind: "cut", region: "leftForearm", depth: 0.6, tool: "scalpel" });
+  line(`act: ${cut.summary} (noise ${cut.noise}, containment leaves ${Math.round(world.facility.noiseContained(cut.noise))})`);
+
+  const wound = world.torture?.wounds[0];
+  if (wound) {
+    const cauterised = world.tortureAct({ kind: "cauterize", woundId: wound.id });
+    line(`act: ${cauterised.summary}`);
+  }
+
+  world.tortureAct({ kind: "tourniquet", limb: "leftLeg" });
+  world.tick(10);
+
+  line();
+  if (world.torture) {
+    for (const row of describeSession(world.torture)) line(`  ${row}`);
+    line(`  survival estimate: ${survivalEstimate(world.torture).toFixed(2)}`);
+  }
+  world.endSession();
+
+  line();
+  line("The room is a place, the body is a system, and the police are a person.");
+  line("Nothing above is scripted: every number came out of state the other systems set.");
+}
+
 function main(): void {
   const devMode = process.argv.includes("--dev-unrestricted");
 
@@ -343,6 +445,7 @@ function main(): void {
   scenarioPerformance();
   scenarioContentFramework(devMode);
   scenarioSystems();
+  scenarioPredation();
   line();
   line("Done.");
 }

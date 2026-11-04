@@ -17,7 +17,7 @@
  * you first.
  */
 
-export type ObjectiveId = "solvency" | "roof" | "law" | "income" | "connection" | "standing";
+export type ObjectiveId = "solvency" | "roof" | "law" | "income" | "connection" | "standing" | "threshold";
 
 export type Objective = {
   id: ObjectiveId;
@@ -35,6 +35,13 @@ export type GoalRelationship = {
   friendship: number;
 };
 
+export type ConfinementGoal = {
+  mode: "agoraphobic" | "legal";
+  fear: number;
+  insideStreak: number;
+  outsideMinutes: number;
+};
+
 export type GoalInput = {
   balance: number;
   houseCondition: number;
@@ -44,9 +51,11 @@ export type GoalInput = {
   day: number;
   /** Every relationship the player has. */
   relationships: GoalRelationship[];
+  /** Absent in older callers: the six original objectives still stand without it. */
+  confinement?: ConfinementGoal;
 };
 
-export type EndingId = "stable" | "arrested" | "evicted" | "condemned" | "isolated";
+export type EndingId = "stable" | "arrested" | "evicted" | "condemned" | "isolated" | "shutIn";
 
 export type Ending = {
   ending: EndingId;
@@ -60,6 +69,9 @@ export const STABLE_DAY = 45;
 export const STABLE_PROGRESS = 0.85;
 export const ISOLATION_DAY = 30;
 export const ISOLATION_FAMILIARITY = 25;
+/** Agoraphobic collapse: fear this high, this many days indoors. */
+export const SHUT_IN_FEAR = 90;
+export const SHUT_IN_DAYS = 21;
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -77,7 +89,7 @@ export function evaluateObjectives(input: GoalInput): Objective[] {
   const best = bestRelationship(input.relationships);
   const connectionScore = clamp01((best.trust / 50 + best.familiarity / 40) / 2);
 
-  return [
+  const objectives: Objective[] = [
     {
       id: "solvency",
       label: "Stay solvent",
@@ -127,6 +139,25 @@ export function evaluateObjectives(input: GoalInput): Objective[] {
       weight: 0.1,
     },
   ];
+
+  // The psychological premise gets its own pressure, and only in that mode: a
+  // legal restriction is not improved by standing at the door more often.
+  if (input.confinement && input.confinement.mode === "agoraphobic") {
+    const fear = input.confinement.fear;
+    objectives.push({
+      id: "threshold",
+      label: "Get to the door",
+      detail:
+        fear <= 40 || input.confinement.outsideMinutes > 0
+          ? `Fear ${Math.round(fear)}/100. The outside is survivable today.`
+          : `Fear ${Math.round(fear)}/100, ${input.confinement.insideStreak} day(s) without crossing the threshold.`,
+      done: fear <= 40 || input.confinement.outsideMinutes > 0,
+      progress: clamp01(1 - fear / 100),
+      weight: 0.12,
+    });
+  }
+
+  return objectives;
 }
 
 export function overallProgress(objectives: Objective[]): number {
@@ -149,6 +180,18 @@ export function evaluateEnding(input: GoalInput): Ending | null {
   }
   if (input.houseCondition <= CONDEMNED_CONDITION) {
     return { ending: "condemned", reason: `Condition fell to ${Math.round(input.houseCondition)}/100; the property was condemned.` };
+  }
+  if (
+    input.confinement?.mode === "agoraphobic" &&
+    input.confinement.fear >= SHUT_IN_FEAR &&
+    input.confinement.insideStreak >= SHUT_IN_DAYS
+  ) {
+    return {
+      ending: "shutIn",
+      reason:
+        `Day ${input.day}: fear ${Math.round(input.confinement.fear)}/100 after ` +
+        `${input.confinement.insideStreak} days inside. The house is not a sentence any more.`,
+    };
   }
   if (input.day >= ISOLATION_DAY) {
     const best = bestRelationship(input.relationships);

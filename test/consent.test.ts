@@ -144,7 +144,9 @@ test("a kink category switched off is refused, and accepted once enabled", () =>
   const accepted = allowed.negotiate({
     categories: ["bondage"],
     intensityCeiling: 5,
-    safewords: [],
+    // Requested explicitly: this asserts negotiation honours the word it was
+    // given, rather than relying on a generated character happening to have it.
+    safewords: ["red"],
     conditions: [],
   });
   assert.equal(accepted.declined, false);

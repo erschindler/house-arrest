@@ -27,6 +27,11 @@ export type AssetClass =
   | "gore.decomposition.stage"
   | "violence.brutal.animation"
   | "violence.torture.sequence"
+  | "torture.room.interior"
+  | "torture.room.hiddenDoor"
+  | "torture.instrument.set"
+  | "anatomy.detail.mesh"
+  | "anatomy.cross.section"
   | "death.agony.animation"
   | "body.nudity.partial"
   | "body.nudity.full"
@@ -90,6 +95,46 @@ export const UE5_ASSET_MANIFEST: AssetRequirement[] = [
       { kind: "dark" },
     ],
     note: "Sustained-cruelty sequences. Requires extreme violence and dark themes together.",
+  },
+  {
+    assetClass: "torture.room.interior",
+    requires: [
+      { kind: "violence", level: "extreme" },
+      { kind: "dark" },
+    ],
+    note: "Concealed room interior: wash-down surfaces, drainage, isolated lighting.",
+  },
+  {
+    assetClass: "torture.room.hiddenDoor",
+    requires: [
+      { kind: "violence", level: "extreme" },
+      { kind: "dark" },
+    ],
+    note: "Concealed door mechanism and its 'sealed' state. Nothing loads while the room is undiscovered.",
+  },
+  {
+    assetClass: "torture.instrument.set",
+    requires: [
+      { kind: "violence", level: "extreme" },
+      { kind: "dark" },
+    ],
+    note: "Instrument meshes paired with TOOL_SPECS. One asset per tool id, no procedural variants.",
+  },
+  {
+    assetClass: "anatomy.detail.mesh",
+    requires: [
+      { kind: "violence", level: "extreme" },
+      { kind: "nudity", level: "full" },
+    ],
+    note: "High-detail body mesh used only in the room; swaps in for the low-detail world mesh.",
+  },
+  {
+    assetClass: "anatomy.cross.section",
+    requires: [
+      { kind: "violence", level: "extreme" },
+      { kind: "dark" },
+    ],
+    note: "Cross-section and organ-exposure materials driven by FOrganState. Extreme only.",
   },
   {
     assetClass: "death.agony.animation",

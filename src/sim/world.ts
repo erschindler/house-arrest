@@ -14,6 +14,22 @@
 
 import { ContentGate } from "../content/gate.ts";
 import type { ContentSettings } from "../content/gate.ts";
+import { Confinement } from "./confinement.ts";
+import type { ApproachOutcome, ConfinementMode, ExposureOutcome } from "./confinement.ts";
+import { Custody } from "./custody.ts";
+import { Facility } from "./facility.ts";
+import type { BuildStage } from "./facility.ts";
+import { Manipulation } from "./manipulation.ts";
+import type {
+  AccompliceOrder,
+  Approach,
+  Assessment,
+  OrderResult,
+  PressOutcome,
+  RecruitRole,
+} from "./manipulation.ts";
+import { advanceTorture, applyAct, createTortureSession } from "./torture.ts";
+import type { TortureAct, TortureActResult, TortureSessionState } from "./torture.ts";
 import { advanceClock, createClock, dayIndex, minuteOfDay, weekdayIndex } from "../core/clock.ts";
 import type { Clock } from "../core/clock.ts";
 import { createRng } from "../core/rng.ts";
@@ -31,11 +47,11 @@ import type { GossipDeps } from "./gossip.ts";
 import { ISSUE_LIBRARY, completeContractorWork, conditionScore, createHouseholdState, dailyHouseholdTick } from "./household.ts";
 import type { HouseholdState } from "./household.ts";
 import { advanceInjury } from "./injury.ts";
-import { advanceInvestigation, createInvestigation, recordEvidence, recordWitness } from "./investigation.ts";
+import { advanceInvestigation, createInvestigation, recordEvidence, recordWitness, statusForHeat } from "./investigation.ts";
 import type { InvestigationState } from "./investigation.ts";
 import { applyPsyche, resolveAssault } from "./violence.ts";
 import type { AssaultOutcome } from "./violence.ts";
-import type { WeaponKind } from "./anatomy.ts";
+import type { DressState, WeaponKind } from "./anatomy.ts";
 import { TIER_INTERVAL_MINUTES, assignTiers, countTiers } from "./lod.ts";
 import type { SimTier, TierAssignment } from "./lod.ts";
 import { MemoryStore } from "./memory.ts";
@@ -58,6 +74,8 @@ export type WorldOptions = {
   seed?: number | string;
   npcCount?: number;
   settings?: Partial<ContentSettings>;
+  /** Why the player does not leave. Agoraphobic by default, per the premise. */
+  confinement?: ConfinementMode;
 };
 
 type WorldInit = {
@@ -69,6 +87,7 @@ type WorldInit = {
   playerId: NpcId;
   memories?: MemoryStore;
   economy?: Economy;
+  confinementMode?: ConfinementMode;
 };
 
 const LOG_LIMIT = 4000;
@@ -91,6 +110,13 @@ export class World {
   readonly phone: Phone;
   readonly net: Net;
   readonly employment: Employment;
+  readonly confinement: Confinement;
+  readonly manipulation: Manipulation;
+  readonly facility: Facility;
+  readonly custody: Custody;
+
+  /** The session in the hidden room, if one is running. Ended sessions are kept until closed. */
+  torture: TortureSessionState | null = null;
 
   household: HouseholdState;
   investigation: InvestigationState;
@@ -117,6 +143,28 @@ export class World {
     this.phone = new Phone(this.phoneAndNetDeps());
     this.net = new Net(this.phoneAndNetDeps());
     this.employment = new Employment();
+    this.confinement = new Confinement({ mode: init.confinementMode ?? "agoraphobic" });
+    this.manipulation = new Manipulation({
+      gate: this.gate,
+      relationships: this.relationships,
+      npcs: this.npcs,
+      rng: this.rng,
+      now: () => this.clock.minutes,
+      log: (entry) => this.logEntry(entry),
+      playerId: this.playerId,
+    });
+    this.facility = new Facility({
+      economy: this.economy,
+      now: () => this.clock.minutes,
+      log: (entry) => this.logEntry(entry),
+    });
+    this.custody = new Custody({
+      npcs: this.npcs,
+      rng: this.rng,
+      now: () => this.clock.minutes,
+      log: (entry) => this.logEntry(entry),
+      noiseMitigation: () => this.facility.soundRating,
+    });
   }
 
   /**
@@ -156,6 +204,7 @@ export class World {
       npcs,
       relationships: new RelationshipStore(generated.relationships),
       playerId: player.id,
+      confinementMode: options.confinement,
     });
   }
 
@@ -185,6 +234,11 @@ export class World {
     world.phone.restore(snapshot.phone);
     world.net.restore(snapshot.net);
     world.employment.restore(snapshot.employment);
+    world.confinement.restore(snapshot.confinement);
+    world.manipulation.restore(snapshot.manipulation);
+    world.facility.restore(snapshot.facility);
+    world.custody.restore(snapshot.custody);
+    world.torture = snapshot.tortureSession;
     world.tiers = new Map(snapshot.tiers);
     world.tierRefreshedAt = snapshot.tierRefreshedAt;
 
@@ -251,6 +305,11 @@ export class World {
       employment: this.employment.snapshot(),
       phone: this.phone.snapshot(),
       net: this.net.snapshot(),
+      confinement: this.confinement.snapshot(),
+      manipulation: this.manipulation.snapshot(),
+      facility: this.facility.snapshot(),
+      custody: this.custody.snapshot(),
+      tortureSession: this.torture,
       household: this.household,
       investigation: this.investigation,
       cooldowns: this.events.cooldownEntries(),
@@ -334,6 +393,10 @@ export class World {
     this.phone.tick();
     this.net.tick();
     this.employment.tickMinute(this.clock, this.economy, (entry) => this.logEntry(entry));
+    this.confinement.tickMinute(1, this.player);
+    this.facility.tick(this.clock.minutes);
+    this.custody.tickMinute(1);
+    this.advanceSessionMinute();
 
     const resolution = this.events.tick(this.eventContext());
     if (resolution) {
@@ -456,6 +519,12 @@ export class World {
 
     this.player.stress = Math.max(0, Math.min(100, this.player.stress * 0.98));
     advanceInvestigation(this.investigation, 1, this.rng);
+
+    this.confinement.daily(day, this.player);
+    this.manipulation.daily(this.investigation.heat);
+    this.facility.daily(this.rng);
+    this.resolveBetrayals();
+    this.resolveEscapes();
   }
 
   /**
@@ -471,9 +540,28 @@ export class World {
     return out;
   }
 
-  /** Every resident currently on the property has a transform. Off-site does not. */
+  /**
+   * Every resident currently on the property has a transform, plus anyone held in
+   * the hidden room — who has no schedule any more and would otherwise be placed
+   * by their own clock, in a house they are not free to walk around.
+   */
   placements(): Placement[] {
-    return this.space.transforms(this.clock.minutes, this.residents());
+    const out = this.space.transforms(this.clock.minutes, this.residents());
+    const room = this.facility.roomId;
+    if (room) {
+      for (const captive of this.custody.list()) {
+        const anchor = this.space.anchorFor(room, "work", `${captive.npcId}|cell`);
+        if (!anchor) continue;
+        out.push({
+          npcId: captive.npcId,
+          room,
+          anchorId: anchor.id,
+          position: { ...anchor.position },
+          yaw: anchor.yaw,
+        });
+      }
+    }
+    return out;
   }
 
   occupants(): Map<LocationId, NpcId[]> {
@@ -499,6 +587,12 @@ export class World {
       reputation: this.reputation,
       day: dayIndex(this.clock),
       relationships,
+      confinement: {
+        mode: this.confinement.mode,
+        fear: this.confinement.fear,
+        insideStreak: this.confinement.insideStreak,
+        outsideMinutes: this.confinement.outsideMinutes,
+      },
     };
   }
 
@@ -551,6 +645,266 @@ export class World {
 
   share(kind: PostKind, body?: string): SocialPost {
     return this.net.post(kind, body);
+  }
+
+  // ---- confinement -------------------------------------------------------
+
+  /** Walk toward the front door. Returns what happens, including a panic. */
+  approachDoor(proximity: number, resolve = 0.5): ApproachOutcome {
+    return this.confinement.approach(proximity, resolve, this.clock.minutes, this.player);
+  }
+
+  practiseExposure(minutes: number): ExposureOutcome {
+    return this.confinement.practiseExposure(minutes, this.clock.minutes, this.player);
+  }
+
+  stepOutside(minutes: number): ExposureOutcome {
+    const outcome = this.confinement.stepOutside(minutes, this.clock.minutes, this.player);
+    if (outcome.trippedMonitor) {
+      this.investigation.heat = Math.min(100, this.investigation.heat + 10);
+      this.investigation.status = statusForHeat(this.investigation.heat);
+      this.logEntry({
+        kind: "confinement",
+        summary: "The monitor recorded the breach.",
+        participants: [this.playerId],
+        gated: false,
+      });
+    }
+    return outcome;
+  }
+
+  // ---- leverage ----------------------------------------------------------
+
+  assess(npcId: NpcId): Assessment {
+    return this.manipulation.assess(npcId);
+  }
+
+  press(npcId: NpcId, approach: Approach): PressOutcome {
+    return this.manipulation.press(npcId, approach);
+  }
+
+  recruit(npcId: NpcId, role: RecruitRole): { ok: boolean; reason: string } {
+    return this.manipulation.recruit(npcId, role);
+  }
+
+  /**
+   * Give an accomplice an order and apply what it changes. The accomplice system
+   * does not touch heat, evidence or custody itself: it reports an effect and the
+   * world decides what that means.
+   */
+  order(npcId: NpcId, order: AccompliceOrder): OrderResult {
+    if (order === "deliverVictim" && !this.facility.ready) {
+      return {
+        ok: false,
+        order,
+        summary: "there is nowhere to put them yet",
+        heatDelta: 0,
+        witnessDamping: 0,
+        delivered: null,
+      };
+    }
+
+    const result = this.manipulation.order(npcId, order);
+    if (!result.ok) return result;
+
+    if (result.heatDelta !== 0) {
+      this.investigation.heat = Math.max(0, Math.min(100, this.investigation.heat + result.heatDelta));
+      this.investigation.status = statusForHeat(this.investigation.heat);
+    }
+
+    if (result.witnessDamping > 0) {
+      const witness =
+        this.investigation.witnesses.find((entry) => entry.reported) ?? this.investigation.witnesses[0];
+      if (witness) witness.confidence = Math.max(0, witness.confidence - result.witnessDamping);
+    }
+
+    if (result.delivered && !this.custody.take(result.delivered, npcId)) {
+      return { ...result, ok: false, summary: "they could not be moved without being seen" };
+    }
+
+    return result;
+  }
+
+  // ---- the room ----------------------------------------------------------
+
+  chooseHiddenRoom(roomId: LocationId): boolean {
+    return this.facility.choose(roomId);
+  }
+
+  beginBuild(stage: BuildStage): { ok: boolean; reason: string } {
+    return this.facility.begin(stage, this.findContractor());
+  }
+
+  get tortureReady(): boolean {
+    return this.facility.ready;
+  }
+
+  beginSession(victimId: NpcId, dress?: DressState): TortureSessionState {
+    if (!this.facility.ready) throw new Error("the room is not finished");
+    if (!this.custody.holds(victimId)) throw new Error("they are not in the room");
+    if (this.torture && !this.torture.ended) throw new Error("a session is already running");
+
+    const victim = this.npcs.get(victimId);
+    if (!victim) throw new Error("unknown character");
+
+    const captive = this.custody.get(victimId);
+    const session = createTortureSession(
+      victim,
+      this.clock.minutes,
+      captive?.restraints,
+      dress ?? victim.appearance.dress,
+    );
+    this.torture = session;
+    this.facility.registerUse(0.5);
+    this.logEntry({
+      kind: "torture",
+      summary: `The session begins: ${victim.givenName}.`,
+      participants: [victimId, this.playerId],
+      gated: true,
+    });
+    return session;
+  }
+
+  tortureAct(act: TortureAct): TortureActResult {
+    const session = this.torture;
+    if (!session) throw new Error("no session is running");
+
+    const result = applyAct(session, this.gate, act, this.clock.minutes, this.rng);
+    if (result.noise > 0) this.noiseEvent(result.noise);
+    if (result.escaped) this.loseCaptive(session.victimId, "They got an arm free");
+    if (result.died) this.killVictim(session, session.causeOfDeath ?? "trauma");
+    return result;
+  }
+
+  /** Close the session and write the body state back onto the character. */
+  endSession(): void {
+    const session = this.torture;
+    if (!session) return;
+
+    const victim = this.npcs.get(session.victimId);
+    if (victim) {
+      victim.injury.vitals.blood = session.vitals.blood;
+      victim.injury.vitals.pain = session.vitals.pain;
+      victim.injury.vitals.shock = session.vitals.shock;
+      victim.injury.vitals.consciousness = session.vitals.consciousness;
+      victim.injury.vitals.infection = session.vitals.infection;
+      victim.appearance.dress = session.dress;
+      if (!session.ended) victim.stress = 100;
+    }
+
+    this.facility.registerUse(1);
+    this.logEntry({
+      kind: "torture",
+      summary: session.ended ? "The room is quiet." : "The session ends; they are still breathing.",
+      participants: [session.victimId, this.playerId],
+      gated: true,
+    });
+    this.torture = null;
+  }
+
+  private findContractor(): NpcId | null {
+    for (const npc of this.npcs.values()) {
+      if (npc.alive && npc.occupation === "contractor") return npc.id;
+    }
+    return null;
+  }
+
+  private advanceSessionMinute(): void {
+    const session = this.torture;
+    if (!session || session.ended) return;
+    const result = advanceTorture(session, 1, this.clock.minutes);
+    if (result.died) this.killVictim(session, result.cause ?? "trauma");
+  }
+
+  /** A scream either stays behind the soundproofing or it does not. */
+  private noiseEvent(noise: number): void {
+    const leaked = this.facility.noiseContained(noise);
+    if (leaked <= 25) return;
+    if (!this.rng.chance(Math.min(0.2, leaked / 2000))) return;
+
+    for (const npc of this.residents()) {
+      if (npc.id === this.playerId || !npc.alive) continue;
+      const witness = recordWitness(this.investigation, npc.id, this.clock.minutes, 0.25 + leaked / 200);
+      if (witness) {
+        this.logEntry({
+          kind: "torture",
+          summary: "Someone in the house heard it and went quiet.",
+          participants: [npc.id],
+          gated: true,
+        });
+      }
+      return;
+    }
+  }
+
+  private killVictim(session: TortureSessionState, cause: string): void {
+    const victim = this.npcs.get(session.victimId);
+    if (victim && victim.alive) {
+      victim.alive = false;
+      victim.injury.alive = false;
+      victim.injury.causeOfDeath = cause;
+      victim.injury.attributedTo = this.playerId;
+      recordEvidence(this.investigation, "body", this.playerId, this.clock.minutes);
+      this.memories.add({
+        atMinute: this.clock.minutes,
+        kind: "violence",
+        summary: `${victim.givenName} ${victim.familyName} died in the room.`,
+        participants: [victim.id, this.playerId],
+        tags: ["death", "torture"],
+        salience: 1,
+        valence: -1,
+      });
+      this.custody.release(victim.id);
+    }
+
+    this.facility.registerUse(2);
+    this.logEntry({
+      kind: "torture",
+      summary: `${victim?.givenName ?? session.victimId} died: ${cause}.`,
+      participants: [session.victimId, this.playerId],
+      gated: true,
+    });
+  }
+
+  private loseCaptive(npcId: NpcId, reason: string): void {
+    this.custody.release(npcId);
+    const witness = recordWitness(this.investigation, npcId, this.clock.minutes, 0.95);
+    if (witness) witness.reported = true;
+    recordEvidence(this.investigation, "testimony", this.playerId, this.clock.minutes);
+    this.investigation.heat = Math.min(100, this.investigation.heat + 15);
+    this.investigation.status = statusForHeat(this.investigation.heat);
+    this.logEntry({
+      kind: "custody",
+      summary: `${reason}. They are talking.`,
+      participants: [npcId, this.playerId],
+      gated: true,
+    });
+  }
+
+  /**
+   * An accomplice who breaks is the most expensive failure in the game: they
+   * become a reported witness, a piece of testimony, and heat in one night.
+   */
+  private resolveBetrayals(): void {
+    for (const npcId of this.manipulation.takeBetrayals()) {
+      const witness = recordWitness(this.investigation, npcId, this.clock.minutes, 0.9);
+      if (witness) witness.reported = true;
+      recordEvidence(this.investigation, "testimony", this.playerId, this.clock.minutes);
+      this.investigation.heat = Math.min(100, this.investigation.heat + 12);
+      this.investigation.status = statusForHeat(this.investigation.heat);
+      this.logEntry({
+        kind: "manipulation",
+        summary: "An accomplice made a statement.",
+        participants: [npcId, this.playerId],
+        gated: true,
+      });
+    }
+  }
+
+  private resolveEscapes(): void {
+    for (const npcId of this.custody.takeEscapees()) {
+      this.loseCaptive(npcId, "They got out of the room");
+    }
   }
 
   /**

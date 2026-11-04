@@ -156,7 +156,14 @@ export function generatePopulation(options: PopulationOptions): PopulationResult
   const { rng, count, player } = options;
   const npcs: Npc[] = [];
   for (let i = 1; i <= count; i += 1) {
-    npcs.push(makeAdultNpc(rng, `npc-${i}`, { occupation: rng.pick(OCCUPATION_KEYS) }));
+    // The draw happens for every character, including the two officers, so the
+    // rng stream does not depend on which characters were promoted.
+    const drawn = rng.pick(OCCUPATION_KEYS);
+    // Two guaranteed officers: random selection would sometimes produce a city
+    // with nobody to corrupt, and the manipulation branch would be unreachable
+    // for that seed — a content hole disguised as randomness.
+    const occupation = i === 3 || i === 4 ? "policeOfficer" : drawn;
+    npcs.push(makeAdultNpc(rng, `npc-${i}`, { occupation }));
   }
 
   const store = new RelationshipStore();

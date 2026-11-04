@@ -4,10 +4,10 @@
  *   node src/tools/run.ts --library fixtures/library --settings mature \
  *       --project ue/HouseArrest --dry-run
  *
- * One command, nine stages, in dependency order:
+ * One command, ten stages, in dependency order:
  *
  *   preflight -> library -> resolve -> content -> project
- *             -> import -> verify -> build -> package
+ *             -> import -> verify -> room -> build -> package
  *
  * Stages 1-5 are pure Node and always run: scan the asset index, match every
  * content class, write the HASContent plugin and registry into the project, and
@@ -183,6 +183,10 @@ function main(): void {
             options.projectDir,
             "Plugins/HASContent/Content/Data/HASAssetRegistry.json",
           );
+        }
+        if (stage.id === "room") {
+          extraEnv["HAS_ROOM_ID"] = arg("room", "basement");
+          extraEnv["HAS_LEVEL"] = arg("level", "/Game/Maps/HouseArrest");
         }
 
         const status = spawn(stage.command, options.projectDir, extraEnv);

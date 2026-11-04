@@ -12,7 +12,12 @@ import { hashString } from "../core/rng.ts";
 import type { RngState } from "../core/rng.ts";
 import type { ContentSettings } from "../content/gate.ts";
 import type { SceneSnapshot } from "../sim/consent.ts";
+import type { ConfinementState } from "../sim/confinement.ts";
+import type { CustodyState } from "../sim/custody.ts";
 import type { EconomySnapshot } from "../sim/economy.ts";
+import type { HiddenRoomState } from "../sim/facility.ts";
+import type { ManipulationState } from "../sim/manipulation.ts";
+import type { TortureSessionState } from "../sim/torture.ts";
 import type { EmploymentState } from "../sim/jobs.ts";
 import type { NetState } from "../sim/net.ts";
 import type { PhoneState } from "../sim/phone.ts";
@@ -22,7 +27,7 @@ import type { SimTier } from "../sim/lod.ts";
 import type { Relationship } from "../sim/relationship.ts";
 import type { GameEventLogEntry, Memory, Npc, NpcId } from "../sim/types.ts";
 
-export const SNAPSHOT_VERSION = 3;
+export const SNAPSHOT_VERSION = 4;
 
 export type WorldSnapshot = {
   version: number;
@@ -39,6 +44,11 @@ export type WorldSnapshot = {
   employment: EmploymentState;
   phone: PhoneState;
   net: NetState;
+  confinement: ConfinementState;
+  manipulation: ManipulationState;
+  facility: HiddenRoomState;
+  custody: CustodyState;
+  tortureSession: TortureSessionState | null;
   household: HouseholdState;
   investigation: InvestigationState;
   cooldowns: [string, number][];

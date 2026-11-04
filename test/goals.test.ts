@@ -77,7 +77,10 @@ test("holding everything together past day 45 is the stable ending", () => {
 
 test("the world exposes its own objectives and ending", () => {
   const world = World.create({ seed: "goals-world", npcCount: 20 });
-  assert.equal(world.objectives().length, 6);
+  const objectives = world.objectives();
+  // Six pressures plus the threshold, which only exists in agoraphobic mode.
+  assert.equal(objectives.length, 7);
+  assert.ok(objectives.some((objective) => objective.id === "threshold"));
   assert.ok(world.progress() > 0);
   assert.equal(world.ending(), null);
 });

@@ -1,13 +1,16 @@
 # HOUSE ARREST
 
-A deterministic, adults-only life/crime simulation, built as two halves that meet in
-the middle:
+A deterministic, adults-only life/crime simulation about a person who cannot leave
+the house — by fear rather than by court order — and what they become willing to do
+from inside it. Built as two halves that meet in the middle:
 
 - **`src/`** — a headless simulation core: persistent people, consequential
   relationships, a live consent state machine, an injury model, content gating, a
-  floorplan with transforms, a phone, a fictional internet, remote work, weighted
-  objectives and five endings, and a world that saves and restores exactly. No
-  engine, no assets, zero dependencies.
+  floorplan with transforms, a phone, a fictional internet, remote work, an
+  agoraphobic confinement model, leverage and accomplices (police included), a
+  concealed room, an organ-level trauma model, weighted objectives and six endings,
+  and a world that saves and restores exactly. No engine, no assets, zero
+  dependencies.
 - **`src/tools/`** — a pipeline that takes an asset library and an Unreal
   installation and produces a compile-ready UE5 project with every content class
   wired to a real asset.
@@ -89,7 +92,7 @@ npm run run -- \
   --engine-root "C:/Program Files/Epic Games/UE_5.5"
 ```
 
-That is the whole machine. Nine stages, in dependency order:
+That is the whole machine. Ten stages, in dependency order:
 
 | # | Stage | What it does | Needs |
 | --- | --- | --- | --- |
@@ -100,11 +103,12 @@ That is the whole machine. Nine stages, in dependency order:
 | 5 | `project` | Scaffolds the UE5 project: `.uproject`, game/editor targets, module, configs, and the two editor scripts. | — |
 | 6 | `import` | Runs `has_import.py` **inside Unreal**, importing the drop folder into `/Game/HASContent` and writing an index of what actually landed. | engine + `--drop` |
 | 7 | `verify` | Runs `has_verify.py` inside Unreal: every path in the registry must actually load, or the pipeline stops. | engine |
-| 8 | `build` | Compiles `<Project>Editor` for your platform with the engine's own `Build.bat` / `Build.sh`. | engine |
-| 9 | `package` | `BuildCookRun` — build, cook, stage, pak, archive to `--archive`. | engine |
+| 8 | `room` | Runs `has_build_hidden_room.py` inside Unreal: seals the chosen room, builds the false wall and tags the concealed volume. | engine |
+| 9 | `build` | Compiles `<Project>Editor` for your platform with the engine's own `Build.bat` / `Build.sh`. | engine |
+| 10 | `package` | `BuildCookRun` — build, cook, stage, pak, archive to `--archive`. | engine |
 
 Stages 1–5 are pure Node and **always work**, on any machine, with no engine
-installed. Stages 6–9 need an engine and are skipped with an explicit reason when
+installed. Stages 6–10 need an engine and are skipped with an explicit reason when
 there isn't one — so the offline half is usable on a laptop, and the engine half is
 usable on the machine that has UE.
 
@@ -153,6 +157,10 @@ ue/HouseArrest/
   Config/                               DefaultEngine.ini, DefaultGame.ini
   Scripts/has_import.py                 headless import of a Fab drop folder
   Scripts/has_verify.py                 asserts every registry path loads
+  Scripts/has_build_hidden_room.py      seals the room and builds the concealed volume
+  Source/Systems/                       body, session, confinement, leverage, hidden room (C++)
+  Content/Data/HASAnatomy.csv           organ table: region, organ, bleed, lethality, death
+  Content/Data/HASTools.csv             tool table: noise, precision, depth, pain, bleed, gore level
   Plugins/HASContent/
     HASContent.uplugin
     Source/HASContent/                  registry subsystem (C++)
@@ -175,6 +183,7 @@ because those classes are not in the file it loaded.
 - scanning a library index, matching all 24 content classes, ranking, rejecting with reasons
 - content-gating the match result so a disabled level cannot reach the engine registry
 - generating the plugin, the C++, the `.uproject`, the configs, the docs, the CSVs
+- generating the gameplay components, the anatomy/tool data tables and the room-build script
 - planning and invoking the engine's import/verify/build/cook commands
 - re-resolving against what the engine actually imported
 - byte-identical output across runs (no timestamps anywhere, same rule as the sim)
@@ -192,8 +201,8 @@ because those classes are not in the file it loaded.
   The plugin and project files are written to the UE 5.4/5.5 API and are ordinary
   boilerplate, but treat your first `build` stage as a debugging session: expect a
   missing include or an API rename, not a clean first pass.
-- **The editor scripts have never been executed.** `has_import.py` and
-  `has_verify.py` use the documented `unreal` API (`AssetImportTask`,
+- **The editor scripts have never been executed.** `has_import.py`,
+  `has_verify.py` and `has_build_hidden_room.py` use the documented `unreal` API (`AssetImportTask`,
   `EditorAssetLibrary`, `EditorStaticMeshLibrary`). The first headless run will
   probably need a path or a flag fixed.
 
@@ -257,7 +266,12 @@ registry and that two runs produce identical bytes.
 | 9 — phone | `src/sim/phone.ts` — threads, failing calls, blocking, generated inbound |
 | 4/12 — space | `src/sim/space.ts` — 12-room floorplan, 40 anchors, occupancy, transforms |
 | 13/19 — work | `src/sim/jobs.ts` — six remote jobs, per-minute accrual, absences, firing |
-| progression | `src/sim/goals.ts` — six weighted objectives, five endings |
+| progression | `src/sim/goals.ts` — six weighted objectives plus the threshold in agoraphobic mode, six endings |
+| premise — confinement | `src/sim/confinement.ts` — fear, tolerance, doorstep panics, exposure practice, legal variant |
+| 7/12 — leverage | `src/sim/manipulation.ts` — six leverage axes, compounding pressure, seven roles including police, betrayal |
+| 12 — concealed room | `src/sim/facility.ts` — staged build, contractors as witnesses, sound rating, concealment, discovery |
+| 7 — custody | `src/sim/custody.ts` — restraints, feeding, noise, escape attempts |
+| 7 — detailed trauma | `src/sim/torture.ts` — organs, limbs, nails, cautery, tourniquets, airway, shock, infection |
 | 15 / 18.6 — UE5 asset gating | `src/content/presentation.ts`, `src/tools/` |
 | dev testing preset | `src/content/presets.ts` |
 | 16/18.13/18.14 — determinism & saves | `src/core/rng.ts`, `src/save/serialize.ts`, `World.snapshot()` |
@@ -278,7 +292,28 @@ slice: work is a *place*, not a timer. Placement consumes no randomness, so addi
 a room cannot shift a save's future — the anchor is chosen by hashing the
 character, the day and the schedule block.
 
-## The three rules the engine enforces
+## The room, and the body in it
+
+| Module | What it does | Where the line is |
+| --- | --- | --- |
+| `confinement.ts` | Fear, tolerance, anxiety, doorstep approaches and exposure practice. Avoidance compounds and lowers the ceiling; practice is the only way down. | No "leave the house" button. Crossing the threshold is a state transition with a panic chance, not a menu choice. |
+| `manipulation.ts` | Six leverage axes derived from state, pressure that compounds across attempts, seven roles, orders that move heat and witnesses, and betrayal when suspicion outruns loyalty. | Police are ordinary NPCs with higher resistance. There is no bribe button and no scripted corruption scene. |
+| `facility.ts` | A seven-stage build with cost, hours and a named contractor per stage; sound rating and concealment that decay with use. | No construction automation. The room is a state machine the editor script builds geometry for; nothing is placed at runtime. |
+| `custody.ts` | Restraint, gag, feeding, terror, escape attempts, and the noise the room has to contain. | Captives are held physically, not narratively. `take()` refuses family, the player and anyone under 18. |
+| `torture.ts` | Organs with integrity and lethality, limbs with tourniquet clocks, nails, cautery that trades bleeding for infection, airway death on a timer, shock and dissociation. | The numbers are balance, not technique: millilitres per minute, not instructions. Every act is content-gated and the module contains no real-world procedure. |
+
+The detailed body exists only inside the room. Elsewhere a character is a schedule,
+a relationship graph and a coarse injury state; behind that door the same character
+is ten organs, four limbs and a blood volume, and the mesh that gets swapped in is a
+different asset class with its own gate.
+
+Turning a police officer is deliberately the most expensive thing in the game:
+resistance around 60–80, a compliance threshold of 65%, and a suspicion clock that
+keeps running while you use them. An officer who turns can cover a scene, damp a
+witness statement or deliver someone to the door — and one who breaks becomes a
+reported witness, a statement and heat in a single night.
+
+## The four rules the engine enforces
 
 1. **Consent is a state machine, not a flag.** `begin()` throws unless both
    participants affirmed. Every act call throws unless the state is `active`.
@@ -293,6 +328,11 @@ character, the day and the schedule block.
    `Math.random()`, no `Date.now()`. `world.hash()` is a fingerprint of the entire
    simulated state, and the tests assert that two worlds with the same seed stay
    identical for a week and that a saved world resumes on the same trajectory.
+4. **Confinement is a state, not a sentence.** The default premise is agoraphobic:
+   fear and tolerance decide what the player can do at the door, and avoidance
+   compounds. Legal confinement is a separate mode with a monitor and a breach
+   penalty. The arrest ending now depends on actual investigative heat, not on the
+   premise the game started with.
 
 ## Architecture
 
@@ -301,11 +341,12 @@ core/      rng (seeded, serializable)   clock
 content/   gate (toggles + hard invariants)   presentation (asset classes)   presets
 sim/       types, relationship, memory, needs, schedule, lod, kink, consent,
            gossip, household, economy, events, space, phone, net, jobs, goals,
-           world
+           confinement, manipulation, facility, custody, torture, world
 worldgen/  deterministic adult population + social graph
 save/      canonical, hashable snapshot
 tools/     requirements, library, resolver, ue5 (plugin emitter),
-           project (UE scaffold), pipeline (plan), run (orchestrator)
+           project (UE scaffold), ue-systems (gameplay C++ emitter),
+           pipeline (plan), run (orchestrator)
 demo.ts    runnable tour
 ```
 
@@ -313,8 +354,10 @@ demo.ts    runnable tour
 
 ```
 clock → tier refresh → NPC needs/schedule → active scene beat (every 5m)
-      → phone → net → work accrual → event engine → contractor completion
-      → (midnight) daily systems, closing out yesterday's shift and bills
+      → phone → net → work accrual → confinement → custody → session physiology
+      → event engine → contractor completion
+      → (midnight) daily systems: yesterday's shift, bills, leverage drift,
+        room decay, escapes and betrayals
 ```
 
 Tiers: `full` (on property, 1 min), `coarse` (nearby/expected, 15 min),
@@ -359,6 +402,10 @@ Removing the preset at ship time is three deletions, listed at the top of
 - A renderer, and a UE client. `world.placements()` produces transforms and
   `space.ts` holds the floorplan a level must be built to; nothing draws either
   yet.
+- **Real-world procedure.** The trauma model is a table of numbers: bleed rates,
+  organ lethality, infection onset, tourniquet time. There is no technique, dosage,
+  material guidance or step ordering in the data tables, and the generated C++ does
+  not invent any.
 
 ## Next, in order
 
@@ -369,18 +416,25 @@ Removing the preset at ship time is three deletions, listed at the top of
    an anchor and a position for every resident on the lot. The remaining work is a
    subsystem that drives actors from it, over a level built to the `space.ts`
    floorplan.
-3. **Port in dependency order:** `rng → clock → space → world tick →
-   schedule/needs/lod → relationship/memory → phone/net/jobs → consent →
-   gate/registry`. Consent last to port and first to parity-test: a subtle
-   translation bug there is unacceptable, not merely annoying.
+3. **Replace the placeholder leverage numbers in the C++.** The generated
+   `UHASManipulationComponent` returns fixed strengths from `LeverageStrength()`;
+   those become real reads once the relationship store is ported. The shape is
+   right, the values are not data yet.
+4. **Port in dependency order:** `rng → clock → space → world tick →
+   schedule/needs/lod → relationship/memory → phone/net/jobs → confinement →
+   consent → gate/registry`. Consent last to port and first to parity-test: a
+   subtle translation bug there is unacceptable, not merely annoying.
 
 ---
 
 # 8. Status
 
 - Simulation core: 24 content classes, 11 kink categories, 12 rooms with 40 anchors,
-  6 jobs, 6 objectives, 5 endings, full save/load, deterministic. 114 tests.
-- Installer and pipeline: Node-side stages tested, generated artifacts asserted.
+  6 jobs, 7 objectives, 6 endings, confinement, leverage, a concealed room, custody
+  and an organ-level trauma model. Full save/load, deterministic. 146 tests.
+- Installer and pipeline: ten stages, Node-side stages tested, generated artifacts
+  asserted. The project stage also emits eleven C++ components, two data tables, the
+  room-build script and a systems document.
 - Generated C++, editor Python and engine invocations: **written, never executed**.
   No engine exists in this repository, so nothing in `ue/` has been compiled or run.
   That is a statement of fact, not a disclaimer: it is the first thing you should

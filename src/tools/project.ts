@@ -19,6 +19,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { stableStringify } from "../save/serialize.ts";
+import { emitSystems } from "./ue-systems.ts";
 
 export type ProjectOptions = {
   /** Module and project name. Must be a valid C++ identifier. */
@@ -89,6 +90,9 @@ public class ${name} : ModuleRules
             "InputCore",
             "HASContent"
         });
+
+        // Json/JsonUtilities are for the data tables the systems emitter writes.
+        PublicDependencyModuleNames.AddRange(new string[] { "Json", "JsonUtilities" });
     }
 }
 `;
@@ -379,6 +383,9 @@ export function emitProject(outDir: string, options: ProjectOptions): string[] {
   write(outDir, "Config/DefaultGame.ini", defaultGameIni(), written);
   write(outDir, "Scripts/has_import.py", importScript(), written);
   write(outDir, "Scripts/has_verify.py", verifyScript(), written);
+
+  // The gameplay half: components, data tables and the room-build script.
+  written.push(...emitSystems(outDir, name));
 
   return written;
 }
