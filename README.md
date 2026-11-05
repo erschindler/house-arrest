@@ -490,7 +490,7 @@ policy does not cover:
 
 ```powershell
 npm.cmd run preflight
-npm.cmd run run -- --library D:\FabLibrary --drop D:\Fab `
+npm.cmd run run -- --library C:\HouseArrest\library --drop C:\HouseArrest\Fab `
   --engine-root "C:\Program Files\Epic Games\UE_5.5" --settings dev
 ```
 
