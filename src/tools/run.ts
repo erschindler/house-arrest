@@ -6,14 +6,15 @@
  *
  * One command, ten stages, in dependency order:
  *
- *   preflight -> library -> resolve -> content -> project
- *             -> import -> verify -> room -> build -> package
+ *   preflight -> library -> resolve -> content -> project -> build
+ *             -> import -> verify -> room -> props -> package
  *
  * Stages 1-5 are pure Node and always run: scan the asset index, match every
  * content class, write the HASContent plugin and registry into the project, and
- * scaffold the C++ project around it. Stages 6-9 need a real Unreal install and
- * are skipped, with a reason, when there isn't one — so the offline half of this
- * is usable on a laptop.
+ * scaffold the C++ project around it. Everything after that needs a real Unreal
+ * install and is skipped, with a reason, when there isn't one — so the offline half
+ * of this is usable on a laptop. The target is compiled before the stages that open
+ * the editor, because a C++ project with no binaries cannot be loaded.
  *
  * What this cannot do: buy or download Fab content. That needs your Epic account
  * and your entitlements, and no script can accept a licence on your behalf. Point

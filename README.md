@@ -181,15 +181,19 @@ That is the whole machine. Eleven stages, in dependency order:
 | --- | --- | --- | --- |
 | 1 | `preflight` | Checks Node, project name, library path, drop folder, engine install. Fails **before** writing anything. | — |
 | 2 | `library` | Scans the asset index (every `*.json` in `--library`, sorted). | — |
-| 3 | `resolve` | Matches all 24 content classes against it under your content settings: kind, keywords, LOD minimums, triangle budget. Records every rejection with a reason. | — |
+| 3 | `resolve` | Matches all 29 content classes against it under your content settings: kind, keywords, LOD minimums, triangle budget. Records every rejection with a reason. | — |
 | 4 | `content` | Writes the **HASContent plugin** into the project: `.uplugin`, C++ subsystem, `HASAssetRegistry.json` containing *only* classes your settings permit. | — |
 | 5 | `project` | Scaffolds the UE5 project: `.uproject`, game/editor targets, module, configs, and the two editor scripts. | — |
-| 6 | `import` | Runs `has_import.py` **inside Unreal**, importing the drop folder into `/Game/HASContent` and writing an index of what actually landed. | engine + `--drop` |
-| 7 | `verify` | Runs `has_verify.py` inside Unreal: every path in the registry must actually load, or the pipeline stops. | engine |
-| 8 | `room` | Runs `has_build_hidden_room.py` inside Unreal: seals the chosen room, builds the false wall and tags the concealed volume. | engine |
-| 9 | `props` | Runs `has_build_room_props.py`: places the computer, phone, camera rig, tool rack, chair, drain and light as tagged placeholders. | engine |
-| 10 | `build` | Compiles `<Project>Editor` for your platform with the engine's own `Build.bat` / `Build.sh`. | engine |
+| 6 | `build` | Compiles `<Project>Editor` for your platform with the engine's own `Build.bat` / `Build.sh`. | engine |
+| 7 | `import` | Runs `has_import.py` **inside Unreal**, importing the drop folder into `/Game/HASContent` and writing an index of what actually landed. | engine + `--drop` |
+| 8 | `verify` | Runs `has_verify.py` inside Unreal: every path in the registry must actually load, or the pipeline stops. | engine |
+| 9 | `room` | Runs `has_build_hidden_room.py` inside Unreal: seals the chosen room, builds the false wall and tags the concealed volume. | engine |
+| 10 | `props` | Runs `has_build_room_props.py`: places the computer, phone, camera rig, tool rack, chair, drain and light as tagged placeholders. | engine |
 | 11 | `package` | `BuildCookRun` — build, cook, stage, pak, archive to `--archive`. | engine |
+
+`build` comes before every stage that opens the editor on purpose: a C++ project
+whose module has never been compiled cannot be loaded, and `UnrealEditor-Cmd` exits
+1 looking for binaries that do not exist yet.
 
 Stages 1–5 are pure Node and **always work**, on any machine, with no engine
 installed. Stages 6–11 need an engine and are skipped with an explicit reason when
@@ -333,11 +337,11 @@ What the installer *does* call, in order:
 | `resolve` | itself | Matches each content class against the index under your settings, with reasons for every rejection. |
 | `content` | itself | Writes the `HASContent` plugin and the registry of *permitted* classes. |
 | `project` | itself | Writes the `.uproject`, targets, module, configs and every generated system/script. |
+| `build` | `Engine/Build/BatchFiles/Build.bat HouseArrestEditor Win64 Development` | Compiles the game module and every component. Must precede anything that opens the editor. |
 | `import` | `UnrealEditor-Cmd.exe <uproject> -run=pythonscript -script=has_import.py` | Imports the extracted drop folder into `/Game/HASContent` and writes an index of what actually landed. |
 | `verify` | same editor, `has_verify.py` | Fails the run if any path in the registry does not load. |
 | `room` | same editor, `has_build_hidden_room.py` | Seals the room, builds the false wall, tags the volume. |
 | `props` | same editor, `has_build_room_props.py` | Places the computer, phone, camera rig, tool rack, chair, drain and light. |
-| `build` | `Engine/Build/BatchFiles/Build.bat HouseArrestEditor Win64 Development` | Compiles the game module and every component. |
 | `package` | `Engine/Build/BatchFiles/RunUAT.bat BuildCookRun` | Cooks, stages, paks and archives. |
 
 ## 4.3 The packs to get for the room

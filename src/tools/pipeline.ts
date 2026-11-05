@@ -26,17 +26,20 @@ export type StageId =
   | "build"
   | "package";
 
+// build comes before every stage that opens the editor. A C++ project whose module
+// has never been compiled cannot be loaded by UnrealEditor-Cmd: it exits 1 looking
+// for binaries, so verify/import/room/props would fail on a fresh checkout.
 export const STAGE_ORDER: StageId[] = [
   "preflight",
   "library",
   "resolve",
   "content",
   "project",
+  "build",
   "import",
   "verify",
   "room",
   "props",
-  "build",
   "package",
 ];
 

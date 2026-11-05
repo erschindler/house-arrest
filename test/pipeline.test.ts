@@ -39,6 +39,20 @@ test("the plan is the fixed dependency order", () => {
   );
 });
 
+test("the editor stages run after the target has been compiled", () => {
+  const order = STAGE_ORDER;
+  const build = order.indexOf("build");
+
+  assert.ok(order.indexOf("project") < build, "the project has to exist before it is compiled");
+  for (const editorStage of ["import", "verify", "room", "props"] as const) {
+    assert.ok(
+      build < order.indexOf(editorStage),
+      `${editorStage} needs compiled binaries: UnrealEditor-Cmd exits 1 without them`,
+    );
+  }
+  assert.ok(order.indexOf("package") > build, "packaging needs the build");
+});
+
 test("engine stages are skipped with a reason rather than failing", () => {
   const plan = planStages(options());
   const build = plan.find((stage) => stage.id === "build");
