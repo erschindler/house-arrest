@@ -441,6 +441,13 @@ npm run run -- \
   --project ue/HouseArrest
 ```
 
+`--library` and `--drop` in that last command are placeholders, and the installer
+cannot create either. `--library` must be a folder you made that holds your `*.json`
+index files; `--drop` must be the folder you extracted your packs into. Until both
+exist, run the offline command from step 4 — `npm run run -- --library
+fixtures/library --settings dev` — which generates the whole project and prints every
+class it could not fill.
+
 `--settings dev` is required for this content: it is the only preset that permits
 extreme violence, full nudity and dark themes. It raises content limits only; the
 adults-only rule, the family prohibition and live consent are code and have no

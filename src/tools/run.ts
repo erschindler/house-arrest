@@ -160,6 +160,26 @@ function main(): void {
   const completed: StageId[] = [];
   const skipped: string[] = [];
 
+  // The import stage writes an index of what actually landed in the engine, and
+  // those paths are not necessarily the ones a hand-written library index named.
+  // Learn them here, before verify inspects the registry, or the run stops on
+  // paths that were correct until the importer renamed them.
+  const learnImported = (): void => {
+    const importedIndex = join(options.outDir, "imported", "imported.json");
+    if (!existsSync(importedIndex)) return;
+
+    console.log("");
+    console.log("== re-resolve: closing the loop against the imported index");
+    const importedLibrary = loadLibrary(join(options.outDir, "imported"));
+    const importedReport = buildReport(gate, importedLibrary);
+    emitInstall(options.projectDir, importedReport);
+    report = importedReport;
+    console.log(
+      `  ${importedReport.totals.resolved}/${importedReport.totals.classes} resolved against ` +
+        `${importedLibrary.assets.length} imported assets`,
+    );
+  };
+
   for (const stage of plan) {
     if (stage.skipReason) {
       skipped.push(stage.id);
@@ -218,27 +238,12 @@ function main(): void {
         console.log(`  ${stage.id} ok`);
       }
       completed.push(stage.id);
+      if (stage.id === "import") learnImported();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`  ${stage.id} failed: ${message}`);
       process.exit(1);
     }
-  }
-
-  // Close the loop: if the engine imported a drop folder, re-resolve against what
-  // actually landed and rewrite the registry. This is the difference between an
-  // installer that guesses paths and one that learns them.
-  const imported = join(options.outDir, "imported", "imported.json");
-  if (existsSync(imported) && completed.includes("import")) {
-    console.log("");
-    console.log("== re-resolve: closing the loop against the imported index");
-    const importedLibrary = loadLibrary(join(options.outDir, "imported"));
-    const importedReport = buildReport(gate, importedLibrary);
-    emitInstall(options.projectDir, importedReport);
-    console.log(
-      `  ${importedReport.totals.resolved}/${importedReport.totals.classes} resolved against ` +
-        `${importedLibrary.assets.length} imported assets`,
-    );
   }
 
   const summary = {
