@@ -68,7 +68,7 @@ function settingsFor(preset: string): ContentSettings {
 }
 
 function quoteArg(value: string): string {
-  return /[\s"]/.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value;
+  return `"${value.replace(/"/g, '""')}"`;
 }
 
 function spawn(command: string[], cwd: string, extraEnv: Record<string, string>): number {
@@ -78,14 +78,15 @@ function spawn(command: string[], cwd: string, extraEnv: Record<string, string>)
   const env = { ...process.env, ...extraEnv };
 
   // Node will not spawn a .bat/.cmd directly on Windows (it throws EINVAL since
-  // the 2024 spawn hardening), and the engine's build and package steps are both
-  // batch files. cmd.exe runs them; /s strips the outer quote pair, so the whole
-  // line is wrapped once and every argument keeps its own quoting.
+  // the 2024 spawn hardening), and both the build and package steps are batch
+  // files. Shell mode hands the quoted line to cmd.exe /d /s /c, which is how a
+  // batch file is meant to be launched; every argument is quoted so paths with
+  // spaces survive.
   const batch = process.platform === "win32" && /\.(bat|cmd)$/i.test(head);
   const line = [head, ...rest].map(quoteArg).join(" ");
 
   const result = batch
-    ? spawnSync(env["ComSpec"] ?? "cmd.exe", ["/d", "/s", "/c", `"${line}"`], {
+    ? spawnSync(env["ComSpec"] ?? "cmd.exe", ["/d", "/s", "/c", line], {
         cwd,
         env,
         stdio: "pipe",

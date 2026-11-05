@@ -22,6 +22,8 @@ declare module "node:child_process" {
     cwd?: string;
     env?: Record<string, string | undefined>;
     stdio?: "inherit" | "pipe";
+    shell?: boolean;
+    windowsVerbatimArguments?: boolean;
   };
 
   export type SpawnSyncResult = {
