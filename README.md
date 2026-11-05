@@ -470,6 +470,26 @@ the next step. Do not expect to walk around on the first build.
 
 ## Troubleshooting the first run
 
+### PowerShell refuses to run `npm`
+
+`npm : File C:\Program Files\nodejs\npm.ps1 cannot be loaded because running
+scripts is disabled on this system` is Windows' execution policy blocking
+PowerShell's npm wrapper. Node is fine. Call the batch wrapper instead, which the
+policy does not cover:
+
+```powershell
+npm.cmd run preflight
+npm.cmd run run -- --library D:\FabLibrary --drop D:\Fab `
+  --engine-root "C:\Program Files\Epic Games\UE_5.5" --settings dev
+```
+
+To fix it permanently, `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+allows local scripts without administrator rights. Do not set `Unrestricted`, and do
+not change the machine-wide policy for this.
+
+The pipeline itself is not affected: it launches `UnrealEditor-Cmd.exe` directly and
+runs `Build.bat` / `RunUAT.bat` through `cmd.exe`, never through PowerShell.
+
 | Symptom | Cause |
 | --- | --- |
 | `UnrealEditor-Cmd not found` | `--engine-root` is the project folder, not the folder *containing* `Engine/`. |

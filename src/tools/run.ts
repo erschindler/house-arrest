@@ -67,11 +67,31 @@ function settingsFor(preset: string): ContentSettings {
   return normalizeSettings({});
 }
 
+function quoteArg(value: string): string {
+  return /[\s"]/.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value;
+}
+
 function spawn(command: string[], cwd: string, extraEnv: Record<string, string>): number {
   const [head, ...rest] = command;
   if (!head) return 1;
 
-  const result = spawnSync(head, rest, { cwd, env: { ...process.env, ...extraEnv }, stdio: "pipe" });
+  const env = { ...process.env, ...extraEnv };
+
+  // Node will not spawn a .bat/.cmd directly on Windows (it throws EINVAL since
+  // the 2024 spawn hardening), and the engine's build and package steps are both
+  // batch files. cmd.exe runs them; /s strips the outer quote pair, so the whole
+  // line is wrapped once and every argument keeps its own quoting.
+  const batch = process.platform === "win32" && /\.(bat|cmd)$/i.test(head);
+  const line = [head, ...rest].map(quoteArg).join(" ");
+
+  const result = batch
+    ? spawnSync(env["ComSpec"] ?? "cmd.exe", ["/d", "/s", "/c", `"${line}"`], {
+        cwd,
+        env,
+        stdio: "pipe",
+        windowsVerbatimArguments: true,
+      })
+    : spawnSync(head, rest, { cwd, env, stdio: "pipe" });
   if (result.error) console.error(`  could not launch: ${result.error.message}`);
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
