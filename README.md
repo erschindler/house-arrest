@@ -120,7 +120,7 @@ licensed per account, and installing software is a decision only you can make.
 
 | What | Where | Version | Why | Size |
 | --- | --- | --- | --- | --- |
-| **Unreal Engine 5** | Epic Games Launcher → Unreal Engine → Library → **+** | **5.5** (5.4 works; set `--engine 5.4`) | The engine itself. Installed *with* source or not, does not matter; **C++ projects** do. | 60 GB, 110 GB+ with debug symbols |
+| **Unreal Engine 5** | Epic Games Launcher → Unreal Engine → Library → **+** | **5.5** (5.4–5.8 work; set `--engine` to match) | The engine itself. Installed *with* source or not, does not matter; **C++ projects** do. | 60 GB, 110 GB+ with debug symbols |
 | **Visual Studio 2022** | visualstudio.microsoft.com | 17.10 or newer | Compiles the game and plugin modules. Install the **Game development with C++** workload — that brings MSVC v143, the Windows 11 SDK and .NET. Without it, `build` fails on a missing `cl.exe`. | 20–40 GB |
 | **Node.js** | nodejs.org | **26** (22.6+ works) | Runs this repository and the pipeline. | 100 MB |
 | **Git** | git-scm.com | any recent | Version control. | 60 MB |
@@ -210,7 +210,7 @@ spreadsheet predicted.
 | `--library <dir>` | `fixtures/library` | Folder of library JSON files. |
 | `--project <dir>` | `ue/HouseArrest` | Where the UE project is generated (gitignored). |
 | `--name <Name>` | `HouseArrest` | Project and module name. Must be a C++ identifier. |
-| `--engine <5.5>` | `5.5` | `EngineAssociation` written into the `.uproject`. |
+| `--engine <5.5>` | `5.5` | `EngineAssociation` written into the `.uproject`. Must match the installed engine (`UE_5.8` → `--engine 5.8`); preflight refuses a mismatch. |
 | `--engine-root <dir>` | `$UE_ROOT` | The folder **containing `Engine/`**. |
 | `--drop <dir>` | none | Extracted Fab packs to import. |
 | `--settings <preset>` | `dev` | `default`, `mature`, or `dev`. |
@@ -288,7 +288,7 @@ because those classes are not in the file it loaded.
   mission design, UI, audio direction, animation blending — that is the actual work,
   and no pipeline does it for you.
 - **The C++ here has never been compiled.** There is no engine in this repository.
-  The plugin and project files are written to the UE 5.4/5.5 API and are ordinary
+  The plugin and project files are written to the UE 5.4–5.8 API and are ordinary
   boilerplate, but treat your first `build` stage as a debugging session: expect a
   missing include or an API rename, not a clean first pass.
 - **The editor scripts have never been executed.** `has_import.py`,
@@ -308,7 +308,7 @@ registry and that two runs produce identical bytes.
 
 | # | Download | From | Version | Notes |
 | --- | --- | --- | --- | --- |
-| 1 | **Unreal Engine** | Epic Games Launcher → Unreal Engine → Library → **+** | **5.5** (5.4 works: `--engine 5.4`) | 60 GB, 110 GB+ with debug symbols. Install to a path with no spaces if you can. |
+| 1 | **Unreal Engine** | Epic Games Launcher → Unreal Engine → Library → **+** | **5.5** (5.4–5.8 work; set `--engine` to match) | 60 GB, 110 GB+ with debug symbols. Install to a path with no spaces if you can. |
 | 2 | **Visual Studio 2022 Community** | visualstudio.microsoft.com | 17.10+ | Tick **Game development with C++**. That brings MSVC v143, the Windows 11 SDK and .NET. Without it the `build` stage fails on a missing `cl.exe`. |
 | 3 | **Node.js** | nodejs.org | **26** (22.6 minimum) | The repo runs TypeScript directly; there is no build step. |
 | 4 | **Git** | git-scm.com | any recent | |
@@ -447,6 +447,10 @@ index files; `--drop` must be the folder you extracted your packs into. Until bo
 exist, run the offline command from step 4 — `npm run run -- --library
 fixtures/library --settings dev` — which generates the whole project and prints every
 class it could not fill.
+
+`--engine` must name the version you actually installed: `--engine 5.8` for a UE_5.8
+folder. Preflight refuses a mismatch, because `EngineAssociation` in the `.uproject`
+would otherwise point at an engine this machine does not have.
 
 `--settings dev` is required for this content: it is the only preset that permits
 extreme violence, full nudity and dark themes. It raises content limits only; the

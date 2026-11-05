@@ -10,7 +10,7 @@
  * so the offline half of the machine works on a laptop with no Unreal install.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type StageId =
@@ -77,6 +77,25 @@ export type EngineTools = {
 };
 
 /** Where the engine's command-line tools live, per platform. */
+// The editor writes its own version next to the binaries. Reading it is the only
+// way to know which EngineAssociation will actually resolve on this machine.
+function installedVersion(engineRoot: string): string | null {
+  const versionFile = join(engineRoot, "Engine/Build/Build.version");
+  if (!existsSync(versionFile)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(versionFile, "utf8")) as {
+      MajorVersion?: unknown;
+      MinorVersion?: unknown;
+    };
+    if (typeof parsed.MajorVersion !== "number" || typeof parsed.MinorVersion !== "number") {
+      return null;
+    }
+    return `${parsed.MajorVersion}.${parsed.MinorVersion}`;
+  } catch {
+    return null;
+  }
+}
+
 export function engineTools(engineRoot: string, platform: string): EngineTools {
   if (platform.startsWith("win")) {
     return {
@@ -266,6 +285,13 @@ export function preflightProblems(options: RunOptions): string[] {
       problems.push(
         `UnrealEditor-Cmd not found at ${tools.editor} — --engine-root must be the folder containing Engine/ (see README, "What you need to install")`,
       );
+    } else {
+      const installed = installedVersion(options.engineRoot);
+      if (installed !== null && installed !== options.engineAssociation) {
+        problems.push(
+          `engine at ${options.engineRoot} is UE ${installed}, but the project is set to UE ${options.engineAssociation} — pass --engine ${installed}, or EngineAssociation will name an engine this machine does not have`,
+        );
+      }
     }
   }
 
