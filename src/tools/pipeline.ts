@@ -121,6 +121,20 @@ export function engineTools(engineRoot: string, platform: string): EngineTools {
   };
 }
 
+/**
+ * The argument list for launching a batch file through cmd.exe.
+ *
+ * Node cannot spawn a .bat directly on Windows (EINVAL since the 2024 spawn
+ * hardening), so the line goes to cmd. With /s, cmd strips the first and last
+ * quote of the command string — which are the quotes around a path like
+ * "C:\Program Files\...\Build.bat" — leaving a path with spaces that cmd reads
+ * as "C:\Program". Wrapping the whole line in one more pair makes the stripped
+ * pair the wrapper, so the quoting that matters survives.
+ */
+export function batchArguments(line: string): string[] {
+  return ["/d", "/s", "/c", `"${line}"`];
+}
+
 export function platformTarget(platform: string): string {
   if (platform.startsWith("win")) return "Win64";
   if (platform === "darwin") return "Mac";

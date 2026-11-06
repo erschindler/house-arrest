@@ -3,7 +3,13 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { emitProject } from "../src/tools/project.ts";
-import { engineTools, planStages, preflightProblems, STAGE_ORDER } from "../src/tools/pipeline.ts";
+import {
+  batchArguments,
+  engineTools,
+  planStages,
+  preflightProblems,
+  STAGE_ORDER,
+} from "../src/tools/pipeline.ts";
 import type { RunOptions } from "../src/tools/pipeline.ts";
 
 function options(overrides: Partial<RunOptions> = {}): RunOptions {
@@ -85,6 +91,17 @@ test("build and package invoke the engine's own toolchain", () => {
   assert.match(build, /-Project=artifacts[\\/]project[\\/]HouseArrest\.uproject/);
   assert.match(pack, /BuildCookRun/);
   assert.match(pack, /-cook/);
+});
+
+test("a batch step is handed to cmd.exe with the whole line wrapped", () => {
+  const line =
+    '"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Build\\BatchFiles\\Build.bat" "HouseArrestEditor"';
+  const args = batchArguments(line);
+
+  assert.deepEqual(args.slice(0, 3), ["/d", "/s", "/c"]);
+  assert.equal(args[3], `"${line}"`, "cmd /s strips the wrapper, not the path's own quotes");
+  assert.ok(args[3]?.startsWith('""C:\\Program Files'));
+  assert.ok(args[3]?.endsWith('"HouseArrestEditor""'));
 });
 
 test("tool paths follow the platform", () => {

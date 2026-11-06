@@ -37,7 +37,7 @@ import { buildReport } from "./resolver.ts";
 import type { InstallReport } from "./resolver.ts";
 import { emitInstall } from "./ue5.ts";
 import { emitProject } from "./project.ts";
-import { planStages, preflightProblems } from "./pipeline.ts";
+import { batchArguments, planStages, preflightProblems } from "./pipeline.ts";
 import type { RunOptions, StageId } from "./pipeline.ts";
 
 function arg(name: string, fallback: string): string {
@@ -80,14 +80,14 @@ function spawn(command: string[], cwd: string, extraEnv: Record<string, string>)
 
   // Node will not spawn a .bat/.cmd directly on Windows (it throws EINVAL since
   // the 2024 spawn hardening), and both the build and package steps are batch
-  // files. Shell mode hands the quoted line to cmd.exe /d /s /c, which is how a
-  // batch file is meant to be launched; every argument is quoted so paths with
-  // spaces survive.
+  // files. The line is handed to cmd.exe /d /s /c, with every argument quoted and
+  // the whole line wrapped again so /s strips the wrapper, not the quotes around
+  // a path containing spaces.
   const batch = process.platform === "win32" && /\.(bat|cmd)$/i.test(head);
   const line = [head, ...rest].map(quoteArg).join(" ");
 
   const result = batch
-    ? spawnSync(env["ComSpec"] ?? "cmd.exe", ["/d", "/s", "/c", line], {
+    ? spawnSync(env["ComSpec"] ?? "cmd.exe", batchArguments(line), {
         cwd,
         env,
         stdio: "pipe",
@@ -231,7 +231,11 @@ function main(): void {
           extraEnv["HAS_LEVEL"] = arg("level", "/Game/Maps/HouseArrest");
         }
 
-        const status = spawn(stage.command, options.projectDir, extraEnv);
+        // Every path in a stage command, and in HAS_REGISTRY / HAS_IMPORT_JSON, is
+        // relative to the repository root, so the engine runs from there too.
+        // Running from inside the project doubled the prefix: the .uproject became
+        // ue\HouseArrest\ue\HouseArrest\HouseArrest.uproject, which does not exist.
+        const status = spawn(stage.command, process.cwd(), extraEnv);
         if (status !== 0) {
           console.error(`  ${stage.id} failed with exit code ${status}; stopping.`);
           process.exit(status);
