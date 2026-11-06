@@ -1176,18 +1176,32 @@ rig, the tool rack, the restraint chair, drainage and light.
         -script="<project>/Scripts/has_build_room_props.py" -unattended -nopause -nosplash
 
 Environment:
-    HAS_LEVEL   level asset (default /Game/Maps/HouseArrest)
+    HAS_LEVEL     level asset (default /Game/Maps/HouseArrest)
+    HAS_REGISTRY  content registry; an entry that declares a "role" matching a
+                  HAS.RoomProp tag is placed at that anchor instead of the
+                  placeholder primitive
 
 Every prop is tagged HAS.RoomProp.<name> so gameplay can find it without a
-hard-coded actor reference. This script does not create meshes or materials: it
-places engine primitives as placeholders at the anchors the room build created.
+hard-coded actor reference. With no role assignments this script creates no
+meshes: it places engine primitives as placeholders at the anchors the room build
+created. With them, the real mesh is placed unscaled and the primitive is only
+used for the anchors still unclaimed.
 """
 
+import json
 import os
 
 import unreal
 
 LEVEL = os.environ.get("HAS_LEVEL", "/Game/Maps/HouseArrest")
+REGISTRY = os.environ.get("HAS_REGISTRY", "") or os.path.join(
+    unreal.Paths.project_dir(),
+    "Plugins",
+    "HASContent",
+    "Content",
+    "Data",
+    "HASAssetRegistry.json",
+)
 
 CUBE = "/Engine/BasicShapes/Cube.Cube"
 CYLINDER = "/Engine/BasicShapes/Cylinder.Cylinder"
@@ -1205,7 +1219,27 @@ PROPS = [
 ]
 
 
-def spawn(tag, mesh_path, location, extent):
+def role_art():
+    """tag -> mesh path, for the anchors the installer's registry claims."""
+    if not REGISTRY or not os.path.isfile(REGISTRY):
+        return {}
+    try:
+        with open(REGISTRY, "r", encoding="utf-8") as handle:
+            registry = json.load(handle)
+    except (OSError, ValueError) as error:
+        unreal.log_warning("HAS: could not read %s (%s)" % (REGISTRY, error))
+        return {}
+
+    roles = {}
+    for entry in registry.get("entries", []):
+        role = entry.get("role", "")
+        path = entry.get("path", "")
+        if role and path:
+            roles[role] = path
+    return roles
+
+
+def spawn(tag, mesh_path, location, extent, roles):
     # Re-running the stage replaces its props instead of stacking a second set.
     for existing in unreal.EditorLevelLibrary.get_all_level_actors():
         if existing.get_actor_label() == tag:
@@ -1217,12 +1251,23 @@ def spawn(tag, mesh_path, location, extent):
     actor.set_actor_label(tag)
     actor.set_editor_property("tags", [unreal.Name(tag)])
 
+    art_path = roles.get(tag, "")
+    if art_path:
+        art = unreal.EditorAssetLibrary.load_asset(art_path)
+        if art is not None:
+            actor.static_mesh_component.set_static_mesh(art)
+            # Real art keeps its own scale; only the placeholder is stretched to the
+            # anchor's extents, so a kit mesh is never distorted to fit a cube.
+            unreal.log("HAS: %s uses %s" % (tag, art_path))
+            return True
+        unreal.log_warning("HAS: %s wants %s but it is not in the engine; placeholder kept" % (tag, art_path))
+
     mesh = unreal.EditorAssetLibrary.load_asset(mesh_path)
     if mesh is not None:
         actor.static_mesh_component.set_static_mesh(mesh)
 
     actor.set_actor_scale3d(unreal.Vector(extent[0] / 100.0, extent[1] / 100.0, extent[2] / 100.0))
-    return actor
+    return False
 
 
 def main():
@@ -1232,11 +1277,15 @@ def main():
 
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).load_level(LEVEL)
 
+    roles = role_art()
+    placed_art = 0
     for tag, mesh_path, location, extent in PROPS:
-        spawn(tag, mesh_path, location, extent)
+        if spawn(tag, mesh_path, location, extent, roles):
+            placed_art += 1
 
     unreal.EditorLevelLibrary.save_current_level()
-    print("HAS: %d props placed in %s" % (len(PROPS), LEVEL))
+    unreal.log("HAS: %d props placed in %s (%d from the registry)" % (len(PROPS), LEVEL, placed_art))
+    print("HAS: %d props placed in %s (%d from the registry)" % (len(PROPS), LEVEL, placed_art))
     return 0
 
 

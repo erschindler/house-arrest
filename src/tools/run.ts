@@ -264,7 +264,9 @@ function main(): void {
         const extraEnv: Record<string, string> = {};
         if (stage.id === "import" && options.dropDir) extraEnv["HAS_DROP_DIR"] = options.dropDir;
         if (stage.id === "import") extraEnv["HAS_IMPORT_JSON"] = importIndex;
-        if (stage.id === "verify") {
+        // props reads the registry too: an entry that names a room anchor replaces
+        // that anchor's placeholder mesh, so the stage needs the same file verify uses.
+        if (stage.id === "verify" || stage.id === "props") {
           extraEnv["HAS_REGISTRY"] = join(
             resolve(options.projectDir),
             "Plugins/HASContent/Content/Data/HASAssetRegistry.json",

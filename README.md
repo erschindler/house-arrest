@@ -782,3 +782,36 @@ Removing the preset at ship time is three deletions, listed at the top of
 Adults-only subject matter. This repository ships no art and no licensed content —
 add your own `LICENSE` before distributing, and read the Fab licence on every pack
 you wire in.
+
+### Telling the room which mesh is the chair
+
+The props stage cannot tell a chair mesh from a shelf mesh, so it does not guess. A
+library entry may claim a level anchor by adding `role`:
+
+```json
+{
+  "id": "/Game/Fab/TheForgottenRoom/SM_Chair",
+  "name": "Chair",
+  "kind": "prop",
+  "tags": ["chair", "restraint", "furniture", "straps"],
+  "triangles": 14000,
+  "lods": 2,
+  "animated": false,
+  "license": "Fab Standard",
+  "role": "HAS.RoomProp.chair"
+}
+```
+
+The role is carried into `HASAssetRegistry.json`, and `has_build_room_props.py` reads
+that registry (via `HAS_REGISTRY`, defaulting to the plugin copy in the project) to
+place the real mesh **unscaled** at the anchor. Every anchor nothing claims keeps its
+placeholder primitive, so a half-populated kit still builds. An entry only reaches the
+registry if it also satisfies its content class (kind, LOD count, triangle budget) —
+check `install-report.json` if an assignment seems to vanish.
+
+Anchors: `HAS.RoomProp.desk`, `.computer`, `.phone`, `.cameraRig`, `.toolRack`,
+`.chair`, `.drain`, `.light`.
+
+Expect the kit's own coordinates not to match these anchors on the first pass; the
+stage is idempotent, so move the actors in the editor or edit the `PROPS` table and
+re-run `props`.

@@ -24,6 +24,14 @@ export type LibraryAsset = {
   animated: boolean;
   license: string;
   pack: string;
+  /**
+   * Optional level anchor this asset fills, e.g. "HAS.RoomProp.chair".
+   *
+   * The room stages cannot tell a chair mesh from a shelf mesh, so they do not
+   * guess: an entry naming a role is placed at that anchor, and every anchor
+   * nothing claims keeps its placeholder primitive.
+   */
+  role?: string;
 };
 
 export type AssetLibrary = {
@@ -70,6 +78,7 @@ export function parseLibraryFile(text: string, fallbackPack: string): LibraryFil
       animated: asBoolean(raw["animated"]),
       license: asString(raw["license"], "unknown"),
       pack,
+      ...(asString(raw["role"]) ? { role: asString(raw["role"]) } : {}),
     };
   });
 

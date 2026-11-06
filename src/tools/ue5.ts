@@ -58,6 +58,9 @@ function registryJson(report: InstallReport): string {
       assetClass: resolution.assetClass,
       kind: specFor(resolution.assetClass).kind,
       path: resolution.primary?.id ?? "",
+      // The room stages place art by anchor, not by class: this is the only thing
+      // that tells them a kit mesh is the chair rather than another vague prop.
+      ...(resolution.primary?.role ? { role: resolution.primary.role } : {}),
       fallbacks: resolution.fallbacks.map((asset) => asset.id),
       requires: requirementFor(resolution.assetClass)?.requires ?? [],
     }));
