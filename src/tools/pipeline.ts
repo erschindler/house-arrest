@@ -11,7 +11,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 export type StageId =
   | "preflight"
@@ -153,8 +153,13 @@ const ENGINE_STAGES: StageId[] = ["import", "verify", "room", "props", "build", 
 export function planStages(options: RunOptions): PlannedStage[] {
   const tools = options.engineRoot ? engineTools(options.engineRoot, options.platform) : null;
   const target = platformTarget(options.platform);
-  const uproject = join(options.projectDir, `${options.projectName}.uproject`);
-  const scripts = join(options.projectDir, "Scripts");
+  // Build.bat and RunUAT.bat change into the engine folder before starting their
+  // tools, so a relative -Project= is resolved against the engine, not the
+  // repository, and UBT answers "Unable to find project file". Everything handed
+  // to the engine is absolute for that reason.
+  const projectDir = resolve(options.projectDir);
+  const uproject = join(projectDir, `${options.projectName}.uproject`);
+  const scripts = join(projectDir, "Scripts");
 
   return STAGE_ORDER.map((id) => {
     const label = LABELS[id];
@@ -260,7 +265,7 @@ export function planStages(options: RunOptions): PlannedStage[] {
           "-stage",
           "-pak",
           "-archive",
-          `-archivedirectory=${options.archiveDir}`,
+          `-archivedirectory=${resolve(options.archiveDir)}`,
         ],
       };
     }

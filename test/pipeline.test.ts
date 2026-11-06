@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { emitProject } from "../src/tools/project.ts";
 import {
   batchArguments,
@@ -88,9 +88,17 @@ test("build and package invoke the engine's own toolchain", () => {
 
   assert.match(build, /Build\.bat/);
   assert.match(build, /HouseArrestEditor/);
-  assert.match(build, /-Project=artifacts[\\/]project[\\/]HouseArrest\.uproject/);
+  assert.ok(
+    build.includes(`-Project=${join(resolve("artifacts/project"), "HouseArrest.uproject")}`),
+    "Build.bat resolves -Project= against the engine folder, so it has to be absolute",
+  );
   assert.match(pack, /BuildCookRun/);
   assert.match(pack, /-cook/);
+  assert.match(
+    pack,
+    /-archivedirectory=.*artifacts[\\/]package/,
+    "RunUAT also runs from the engine folder, so the archive path is absolute too",
+  );
 });
 
 test("a batch step is handed to cmd.exe with the whole line wrapped", () => {

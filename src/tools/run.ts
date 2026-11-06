@@ -25,7 +25,7 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { ContentGate, normalizeSettings } from "../content/gate.ts";
 import type { ContentSettings } from "../content/gate.ts";
@@ -166,7 +166,7 @@ function main(): void {
   // Learn them here, before verify inspects the registry, or the run stops on
   // paths that were correct until the importer renamed them.
   const learnImported = (): void => {
-    const importedIndex = join(options.outDir, "imported", "imported.json");
+    const importedIndex = join(resolve(options.outDir), "imported", "imported.json");
     if (!existsSync(importedIndex)) return;
 
     console.log("");
@@ -216,13 +216,13 @@ function main(): void {
         });
         console.log(`  wrote ${written.length} files (uproject, targets, module, python)`);
       } else if (stage.command) {
-        const importIndex = join(options.outDir, "imported", "imported.json");
+        const importIndex = join(resolve(options.outDir), "imported", "imported.json");
         const extraEnv: Record<string, string> = {};
         if (stage.id === "import" && options.dropDir) extraEnv["HAS_DROP_DIR"] = options.dropDir;
         if (stage.id === "import") extraEnv["HAS_IMPORT_JSON"] = importIndex;
         if (stage.id === "verify") {
           extraEnv["HAS_REGISTRY"] = join(
-            options.projectDir,
+            resolve(options.projectDir),
             "Plugins/HASContent/Content/Data/HASAssetRegistry.json",
           );
         }
