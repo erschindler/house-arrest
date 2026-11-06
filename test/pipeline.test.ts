@@ -152,6 +152,18 @@ test("the scaffold is a plugin-aware project with the editor scripts", () => {
   assert.ok(plugins.includes("EditorScriptingUtilities"), "EditorAssetLibrary lives in this plugin");
   assert.ok(uproject.Plugins.every((plugin) => plugin.Enabled));
 
+  const targets = written.filter((file) => file.endsWith(".Target.cs"));
+  assert.equal(targets.length, 2, "game and editor targets");
+  for (const target of targets) {
+    const rules = readFileSync(join(dir, target), "utf8");
+    assert.match(
+      rules,
+      /BuildSettingsVersion\.Latest/,
+      "a pinned version uses older defaults, which the editor target may not override",
+    );
+    assert.doesNotMatch(rules, /BuildSettingsVersion\.V\d/);
+  }
+
   const module = readFileSync(join(dir, "Source/HouseArrest/HouseArrest.Build.cs"), "utf8");
   assert.match(module, /"HASContent"/, "the game module has to depend on the content plugin");
 

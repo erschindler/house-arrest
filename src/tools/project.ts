@@ -65,7 +65,12 @@ public class ${name}${editor ? "Editor" : ""}Target : TargetRules
     public ${name}${editor ? "Editor" : ""}Target(TargetInfo Target) : base(Target)
     {
         Type = TargetType.${editor ? "Editor" : "Game"};
-        DefaultBuildSettings = BuildSettingsVersion.V5;
+        // Latest, not a pinned V5: an installed engine builds UnrealEditor with its
+        // own newest defaults, and a game target that pins an older version sets
+        // those properties to different values. UBT refuses that outright
+        // ("modifies the values of properties ... has build products in common with
+        // UnrealEditor") unless the target gets a unique build environment.
+        DefaultBuildSettings = BuildSettingsVersion.Latest;
         IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
         ExtraModuleNames.Add("${name}");
     }
