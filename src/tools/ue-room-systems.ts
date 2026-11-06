@@ -151,7 +151,7 @@ enum class EHASToolId : uint8
  * which is what keeps "where did it hit" in one implementation.
  */
 UCLASS(ClassGroup = (HAS), meta = (BlueprintSpawnableComponent))
-class ${project.toUpperCase()}API UHASPhysicsContactComponent : public UActorComponent
+class ${project.toUpperCase()}_API UHASPhysicsContactComponent : public UActorComponent
 {
     GENERATED_BODY()
 
@@ -418,7 +418,7 @@ struct FHASWound
  * the content subsystem first, so a build without gore simply has dry wounds.
  */
 UCLASS(ClassGroup = (HAS), meta = (BlueprintSpawnableComponent))
-class ${project.toUpperCase()}API UHASWoundComponent : public UActorComponent
+class ${project.toUpperCase()}_API UHASWoundComponent : public UActorComponent
 {
     GENERATED_BODY()
 
@@ -652,7 +652,7 @@ struct FHASJointState
  * what happens next rather than whether it happens.
  */
 UCLASS(ClassGroup = (HAS), meta = (BlueprintSpawnableComponent))
-class ${project.toUpperCase()}API UHASDismembermentComponent : public UActorComponent
+class ${project.toUpperCase()}_API UHASDismembermentComponent : public UActorComponent
 {
     GENERATED_BODY()
 
@@ -813,7 +813,7 @@ struct FHASVoiceSet
  * is just a gap in the audio.
  */
 UCLASS(ClassGroup = (HAS), meta = (BlueprintSpawnableComponent))
-class ${project.toUpperCase()}API UHASVoiceComponent : public UActorComponent
+class ${project.toUpperCase()}_API UHASVoiceComponent : public UActorComponent
 {
     GENERATED_BODY()
 
@@ -966,7 +966,7 @@ struct FHASListing
  * marketplace, no upload, no cryptocurrency and no browser.
  */
 UCLASS(ClassGroup = (HAS), meta = (BlueprintSpawnableComponent))
-class ${project.toUpperCase()}API UHASProductionComponent : public UActorComponent
+class ${project.toUpperCase()}_API UHASProductionComponent : public UActorComponent
 {
     GENERATED_BODY()
 

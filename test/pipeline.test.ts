@@ -152,6 +152,19 @@ test("the scaffold is a plugin-aware project with the editor scripts", () => {
   assert.ok(plugins.includes("EditorScriptingUtilities"), "EditorAssetLibrary lives in this plugin");
   assert.ok(uproject.Plugins.every((plugin) => plugin.Enabled));
 
+  for (const source of written.filter((file) => file.endsWith(".h") || file.endsWith(".cpp"))) {
+    const text = readFileSync(join(dir, source), "utf8");
+    assert.ok(
+      !/HOUSEARRESTAPI\b/.test(text),
+      `${source} must use HOUSEARREST_API: UHT only treats *_API tokens as export macros`,
+    );
+  }
+  const physics = readFileSync(
+    join(dir, "Source/HouseArrest/Systems/HASPhysicsContactComponent.h"),
+    "utf8",
+  );
+  assert.match(physics, /class HOUSEARREST_API UHASPhysicsContactComponent/);
+
   const targets = written.filter((file) => file.endsWith(".Target.cs"));
   assert.equal(targets.length, 2, "game and editor targets");
   for (const target of targets) {
