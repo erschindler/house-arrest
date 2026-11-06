@@ -216,6 +216,18 @@ test("the scaffold is a plugin-aware project with the editor scripts", () => {
   const module = readFileSync(join(dir, "Source/HouseArrest/HouseArrest.Build.cs"), "utf8");
   assert.match(module, /"HASContent"/, "the game module has to depend on the content plugin");
 
+  const roomScript = readFileSync(join(dir, "Scripts/has_build_hidden_room.py"), "utf8");
+  assert.match(
+    roomScript,
+    /new_level\(LEVEL\)/,
+    "a generated project has no map, so the room stage has to create one",
+  );
+  assert.match(roomScript, /HAS\.Room\./);
+  assert.ok(
+    !/does not exist; build the house level first/.test(roomScript),
+    "the room stage must not abort on a project it generated itself",
+  );
+
   const verify = readFileSync(join(dir, "Scripts/has_verify.py"), "utf8");
   assert.match(verify, /HASAssetRegistry\.json/);
   assert.match(verify, /sys\.exit\(main\(\)\)/);

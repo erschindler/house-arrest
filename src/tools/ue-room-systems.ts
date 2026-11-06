@@ -1230,6 +1230,7 @@ def main():
     for tag, mesh_path, location, extent in PROPS:
         spawn(tag, mesh_path, location, extent)
 
+    unreal.EditorLevelLibrary.save_current_level()
     print("HAS: %d props placed in %s" % (len(PROPS), LEVEL))
     return 0
 

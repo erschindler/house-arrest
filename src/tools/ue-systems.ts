@@ -1464,6 +1464,10 @@ opening, builds a false wall two metres in front of it, and tags the enclosed
 volume "HAS.HiddenRoom". It does not create Blueprints and does not choose art:
 the level designer places the door mesh and the room interior from the registry.
 
+A generated project ships no map, so if the level is missing this creates an empty
+one, and if no room root is tagged it places a placeholder at the origin. That is
+enough to run the stage and see the result; it is not a house.
+
 This script has not been executed outside a real editor. Treat the first run as a
 debugging session.
 """
@@ -1518,16 +1522,26 @@ def main():
         print("HAS: %r is not a room with space to hide anything in" % ROOM_ID)
         return 2
 
-    if not unreal.EditorAssetLibrary.does_asset_exist(LEVEL):
-        print("HAS: level %s does not exist; build the house level first" % LEVEL)
-        return 2
-
-    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).load_level(LEVEL)
+    editors = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+    if unreal.EditorAssetLibrary.does_asset_exist(LEVEL):
+        editors.load_level(LEVEL)
+    else:
+        # A generated project has no map, and a stage that refuses to run without
+        # one can never do anything. An empty scaffold level is the honest
+        # minimum; the house itself stays the designer's job.
+        unreal.EditorAssetLibrary.make_directory(os.path.dirname(LEVEL))
+        if not editors.new_level(LEVEL):
+            print("HAS: could not create a level at %s" % LEVEL)
+            return 2
+        print("HAS: created an empty level at %s" % LEVEL)
 
     root = room_root()
     if root is None:
-        print("HAS: no actor tagged HAS.Room.%s in %s" % (ROOM_ID, LEVEL))
-        return 2
+        # Everything below is positioned against the room root, so a missing one
+        # gets a placeholder at the origin rather than stopping the run.
+        root = spawn_box(unreal.Vector(0, 0, 0), (500, 400, 20), "HAS_Room_%s" % ROOM_ID)
+        root.set_editor_property("tags", [unreal.Name("HAS.Room." + ROOM_ID)])
+        print("HAS: no HAS.Room.%s actor; placed a placeholder room root" % ROOM_ID)
 
     origin = root.get_actor_location()
     hidden = spawn_box(
