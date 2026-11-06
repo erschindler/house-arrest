@@ -416,6 +416,23 @@ filenames, all `*.json` in the folder are read in sorted order:
 `kind` must be one of `mesh`, `material`, `decal`, `animation`, `prop`. `id` is the
 Unreal soft path. `fixtures/library/` contains three complete examples.
 
+### Sorting a download folder into packs
+
+`scripts/fetch-art.ps1` does the part that is mechanical: it extracts every `.zip` in
+`Downloads` into its own folder under the drop folder, counts the Unreal content files
+in each, and deletes the folders that hold none. That is how an unrelated archive — a
+DCS module, a mod, a stray download — gets filtered out instead of reaching the
+importer as hundreds of `.lua`/`.json`/`.ts` files.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\fetch-art.ps1
+powershell -ExecutionPolicy Bypass -File scripts\fetch-art.ps1 -Source D:\downloads -Destination C:\HouseArrest\Fab
+```
+
+It downloads nothing, and it cannot: Fab content needs your Epic account, the pack's
+entitlement and acceptance of its licence. It prints the run command to use afterwards
+when at least one pack survives.
+
 You do not have to get the index perfect first. Run once with no `--drop`: the
 resolver prints every class it cannot fill and the exact search terms for each, and
 writes `Docs/IMPORT_CHECKLIST.csv`. After a successful import, the pipeline
