@@ -844,3 +844,36 @@ Role assignments no longer depend on a content class picking the asset: they are
 written to the registry's own `roles` list, so a kit mesh with one LOD still becomes
 the chair. What still needs checking is the path itself — `verify` fails the pipeline
 if a registered path is not in the engine.
+
+### Before the first build: the machine check
+
+`scripts/doctor.ps1` answers "is this machine ready" with output instead of guesswork.
+It installs nothing, downloads nothing, and writes nothing into `src/`, `test/` or the
+generated Unreal project.
+
+```powershell
+curl.exe -L -o scripts\doctor.ps1 "https://raw.githubusercontent.com/erschindler/house-arrest/main/scripts/doctor.ps1"
+powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1
+```
+
+It reports Node and npm; Git and Git LFS (noticed, not required by the pipeline);
+Visual Studio's C++ toolset via `vswhere` and the newest Windows SDK; every Unreal
+Engine 5 install found through the Epic launcher manifest or `C:\Program Files\Epic
+Games`, with the version read from `Engine\Build\Build.version` and the newest 5.6+
+one selected for the pipeline; whether an editor process is holding the DLLs; and the
+project's own files, including whether the git working tree has changes.
+
+Then it runs the project's own checks, `npx --no-install tsc --noEmit` and
+`node --test test/`, and reports both exit codes.
+
+`-Build` also runs the pipeline's engine stages, and refuses to start while the Unreal
+editor is open, because the link fails on locked DLLs:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1 -Build
+```
+
+Reports go to `C:\HouseArrest\diagnostics` (created if missing, never inside the source
+tree) as `environment.txt`, `typescript.txt` and, with `-Build`, `pipeline.txt`. The
+names are fixed so two runs diff cleanly. The exit code is 1 when anything is missing,
+which makes it usable as a gate.
