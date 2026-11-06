@@ -818,21 +818,21 @@ re-run `props`.
 
 ### Drafting that index from inside the editor
 
-`scripts/scan-pack.py` reads the asset registry of a pack you have already imported
+`scripts/scan_pack.py` reads the asset registry of a pack you have already imported
 and writes a first-draft library file: every static mesh with its `/Game` path, LOD
 count, triangle count and folder tags, plus a guessed `role` for each room anchor
 whose name matches (`chair`, `desk`, `monitor`, `phone`, `camera`, `shelf`, `drain`,
 `lamp`). It modifies nothing.
 
 ```powershell
-curl.exe -L -o scripts\scan-pack.py "https://raw.githubusercontent.com/erschindler/house-arrest/main/scripts/scan-pack.py"
+curl.exe -L -o scripts\scan_pack.py "https://raw.githubusercontent.com/erschindler/house-arrest/main/scripts/scan_pack.py"
 ```
 
 Then, with the project open, either run it as a commandlet or paste this into the
 Output Log's Python console:
 
 ```python
-exec(open(r"C:\ha10\house-arrest-main\scripts\scan-pack.py").read())
+exec(open(r"C:\ha10\house-arrest-main\scripts\scan_pack.py").read())
 ```
 
 Set `HAS_PACK=/Game/Fab/TheForgottenRoom` to scan one folder (the default scans all of
