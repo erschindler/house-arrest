@@ -178,6 +178,8 @@ This script has not been executed outside a real editor.
 
 import json
 import os
+import re
+import shutil
 import sys
 
 import unreal
@@ -195,6 +197,28 @@ EXTENSIONS = {
 }
 
 MESH_EXTENSIONS = (".fbx", ".obj")
+PACKED_EXTENSIONS = (".uasset", ".umap")
+
+# Fab packs usually ship as built content, not as source files. The class name of the
+# asset decides which library kind it is indexed as.
+KIND_BY_CLASS = {
+    "StaticMesh": "mesh",
+    "SkeletalMesh": "mesh",
+    "Material": "material",
+    "MaterialInstance": "material",
+    "MaterialInstanceConstant": "material",
+    "AnimSequence": "animation",
+    "AnimMontage": "animation",
+    "Blueprint": "prop",
+}
+
+
+def say(message):
+    # print() is block-buffered inside the commandlet and is lost when the script
+    # exits non-zero, which is exactly when the message matters. The log always keeps
+    # it, so every diagnostic goes to both.
+    print(message)
+    unreal.log(message)
 
 
 def importable_files(root):
@@ -210,9 +234,16 @@ def importable_files(root):
 
 def tags_for(name):
     cleaned = os.path.splitext(name)[0]
-    for separator in ("-", " ", "."):
+    for separator in ("-", " ", ".", "/"):
         cleaned = cleaned.replace(separator, "_")
-    return [token.lower() for token in cleaned.split("_") if token]
+    tokens = []
+    for chunk in cleaned.split("_"):
+        # SM_BasementInterior has to be able to match the keyword "basement", so the
+        # CamelCase the packs use is split rather than kept as one long token.
+        for part in re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", chunk).split("_"):
+            if part:
+                tokens.append(part.lower())
+    return tokens
 
 
 def describe(asset_path, kind, name, pack):
@@ -237,19 +268,126 @@ def describe(asset_path, kind, name, pack):
         entry["triangles"] = int(unreal.EditorStaticMeshLibrary.get_number_triangles(mesh))
         entry["lods"] = int(unreal.EditorStaticMeshLibrary.get_lod_count(mesh))
     except Exception as error:  # noqa: BLE001 - diagnostics only
-        print("HAS: could not measure %s: %s" % (asset_path, error))
+        say("HAS: could not measure %s: %s" % (asset_path, error))
     return entry
+
+
+def packed_assets(root):
+    found = []
+    for base, _dirs, files in os.walk(root):
+        for name in sorted(files):
+            if os.path.splitext(name)[1].lower() in PACKED_EXTENSIONS:
+                found.append(os.path.join(base, name))
+    found.sort()
+    return found
+
+
+def extension_census(root):
+    counts = {}
+    for base, _dirs, files in os.walk(root):
+        for name in files:
+            extension = os.path.splitext(name)[1].lower() or "(none)"
+            counts[extension] = counts.get(extension, 0) + 1
+    if not counts:
+        return "the folder is empty"
+    return ", ".join("%s=%d" % (key, counts[key]) for key in sorted(counts))
+
+
+def relative_under_content(path, root):
+    """Strip the pack wrapper, including a literal Content/ folder, from a path."""
+    parts = os.path.relpath(path, root).replace("\\\\", "/").split("/")
+    if "Content" in parts:
+        parts = parts[parts.index("Content") + 1:]
+    return [part for part in parts if part]
+
+
+def write_index(entries):
+    out_path = os.environ.get("HAS_IMPORT_JSON", "")
+    if not out_path:
+        out_path = os.path.join(unreal.Paths.project_dir(), "Saved", "has_imported.json")
+
+    payload = {"pack": "imported drop folder", "assets": entries}
+    directory = os.path.dirname(out_path)
+    if directory and not os.path.isdir(directory):
+        os.makedirs(directory)
+    with open(out_path, "w") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+    return out_path
+
+
+def adopt_content_pack(drop, packed):
+    """A pack of .uasset files is already engine content: copy it in, do not import.
+
+    Copying under Content/HASContent keeps the pack's own folder layout out of the
+    project root, and the asset registry finds the files there.
+    """
+    content = unreal.Paths.project_content_dir().replace("\\\\", "/").rstrip("/")
+    planned = []
+    copied = 0
+
+    for path in packed:
+        parts = relative_under_content(path, drop)
+        if not parts:
+            continue
+        destination = os.path.join(content, "HASContent", *parts)
+        directory = os.path.dirname(destination)
+        if directory and not os.path.isdir(directory):
+            os.makedirs(directory)
+        shutil.copy2(path, destination)
+        copied += 1
+        if parts[-1].lower().endswith(".umap"):
+            continue
+        stem = os.path.splitext(parts[-1])[0]
+        planned.append(
+            {
+                "path": DEST_ROOT + "/" + "/".join(parts[:-1] + [stem]),
+                "name": stem,
+                "pack": "/".join(parts[:-1]) or "pack",
+            }
+        )
+
+    say("HAS: copied %d pack files into %s/HASContent" % (copied, content))
+
+    registry = unreal.AssetRegistryHelpers.get_asset_registry()
+    try:
+        registry.scan_paths_synchronous([DEST_ROOT], True, True)
+    except Exception as error:  # noqa: BLE001 - the signature differs across versions
+        say("HAS: registry rescan failed (%s); reading what is on disk" % error)
+
+    entries = []
+    failures = []
+    for item in planned:
+        if not unreal.EditorAssetLibrary.does_asset_exist(item["path"]):
+            failures.append(item["path"])
+            continue
+        asset = unreal.EditorAssetLibrary.load_asset(item["path"])
+        class_name = asset.get_class().get_name() if asset is not None else ""
+        entry = describe(item["path"], KIND_BY_CLASS.get(class_name, "prop"), item["name"], item["pack"])
+        if class_name:
+            entry["tags"] = sorted(set(entry["tags"] + [class_name.lower()]))
+        entries.append(entry)
+
+    write_index(entries)
+    say("HAS: adopted %d assets, %d unreadable" % (len(entries), len(failures)))
+    for path in failures:
+        say("HAS: could not read %s" % path)
+    return 0 if entries else 1
 
 
 def main():
     drop = os.environ.get("HAS_DROP_DIR", "")
     if not drop or not os.path.isdir(drop):
-        print("HAS: HAS_DROP_DIR is not a directory: %r" % drop)
+        unreal.log_error("HAS: HAS_DROP_DIR is not a directory: %r" % drop)
         return 2
 
     files = importable_files(drop)
     if not files:
-        print("HAS: nothing importable under %s" % drop)
+        packed = packed_assets(drop)
+        if packed:
+            return adopt_content_pack(drop, packed)
+        unreal.log_error(
+            "HAS: nothing importable under %s - %s" % (drop, extension_census(drop))
+        )
         return 2
 
     tasks = []
@@ -278,8 +416,12 @@ def main():
             }
         )
 
-    print("HAS: importing %d files into %s" % (len(tasks), DEST_ROOT))
-    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
+    say("HAS: importing %d files into %s" % (len(tasks), DEST_ROOT))
+    try:
+        unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
+    except Exception as error:  # noqa: BLE001 - the engine raises on unusable files
+        unreal.log_error("HAS: import_asset_tasks raised: %s" % error)
+        return 2
 
     entries = []
     failures = []
@@ -289,20 +431,10 @@ def main():
             continue
         entries.append(describe(item["path"], item["kind"], item["name"], item["pack"]))
 
-    out_path = os.environ.get("HAS_IMPORT_JSON", "")
-    if not out_path:
-        out_path = os.path.join(unreal.Paths.project_dir(), "Saved", "has_imported.json")
-
-    payload = {"pack": "imported drop folder", "assets": entries}
-    directory = os.path.dirname(out_path)
-    if directory and not os.path.isdir(directory):
-        os.makedirs(directory)
-    with open(out_path, "w") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
-
-    print("HAS: imported %d, failed %d, index written to %s" % (len(entries), len(failures), out_path))
+    out_path = write_index(entries)
+    say("HAS: imported %d, failed %d, index written to %s" % (len(entries), len(failures), out_path))
     for path in failures:
-        print("HAS: failed to import %s" % path)
+        say("HAS: failed to import %s" % path)
 
     return 0 if not failures else 1
 
