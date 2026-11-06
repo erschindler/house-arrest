@@ -832,7 +832,7 @@ Then, with the project open, either run it as a commandlet or paste this into th
 Output Log's Python console:
 
 ```python
-exec(open(r"C:\ha34\scripts\scan-pack.py").read())
+exec(open(r"C:\ha10\house-arrest-main\scripts\scan-pack.py").read())
 ```
 
 Set `HAS_PACK=/Game/Fab/TheForgottenRoom` to scan one folder (the default scans all of
