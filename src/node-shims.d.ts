@@ -8,6 +8,8 @@ declare module "node:fs" {
   export function readdirSync(path: string): string[];
   export function mkdirSync(path: string, options?: { recursive?: boolean }): void;
   export function existsSync(path: string): boolean;
+  export function openSync(path: string, flags: string): number;
+  export function closeSync(fd: number): void;
 }
 
 declare module "node:path" {

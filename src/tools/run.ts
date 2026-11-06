@@ -24,7 +24,7 @@
  * Nothing here writes a timestamp; the outputs are comparable between runs.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { ContentGate, normalizeSettings } from "../content/gate.ts";
@@ -66,6 +66,31 @@ function settingsFor(preset: string): ContentSettings {
     return normalizeSettings({ sexual: "explicit", nudity: "full", violence: "graphic", darkThemes: true });
   }
   return normalizeSettings({});
+}
+
+/**
+ * Compiled module DLLs the running editor has loaded. Windows lets the loader open a
+ * DLL without write sharing, so a write-open of a loaded one fails — which is exactly
+ * why the linker reports LNK1104 after a 20 second retry instead of saying who holds
+ * it. Nothing to check on other platforms: the ELF/Mach-O loader does not lock.
+ */
+function lockedBinaries(projectDir: string, name: string): string[] {
+  if (process.platform !== "win32") return [];
+
+  const candidates = [
+    join(projectDir, `Binaries/Win64/UnrealEditor-${name}.dll`),
+    join(projectDir, "Plugins/HASContent/Binaries/Win64/UnrealEditor-HASContent.dll"),
+  ];
+  const locked: string[] = [];
+  for (const file of candidates) {
+    if (!existsSync(file)) continue;
+    try {
+      closeSync(openSync(file, "r+"));
+    } catch {
+      locked.push(file);
+    }
+  }
+  return locked;
 }
 
 function quoteArg(value: string): string {
@@ -129,6 +154,20 @@ function main(): void {
   console.log(`drop:      ${options.dropDir ?? "(none)"}`);
   console.log(`engine:    ${options.engineRoot ?? "(not found — engine stages will be skipped)"}`);
   console.log(`settings:  ${options.settings}`);
+  // Stages that write into the project the editor would have open: the build relinks
+  // the modules it loaded, and the Python stages save the level it holds. UBT reports
+  // that as LNK1104 after a twenty-second retry, which reads like a toolchain fault.
+  const engineWriters: StageId[] = ["build", "import", "verify", "room", "props", "package"];
+  if (plan.some((entry) => engineWriters.includes(entry.id) && !entry.skipReason)) {
+    const locked = lockedBinaries(resolve(options.projectDir), options.projectName);
+    if (locked.length > 0) {
+      console.error("engine stages are blocked: an Unreal editor has these files open:");
+      for (const file of locked) console.error(`  ${file}`);
+      console.error("save the level, close UnrealEditor, and run again.");
+      process.exit(1);
+    }
+  }
+
   console.log("");
   console.log("plan:");
 
