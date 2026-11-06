@@ -51,7 +51,10 @@ function write(outDir: string, relative: string, contents: string, written: stri
   written.push(relative);
 }
 
-function registryJson(report: InstallReport): string {
+/** A level anchor claimed by an asset: "put this mesh where the chair goes". */
+export type RoleAssignment = { role: string; path: string };
+
+function registryJson(report: InstallReport, roles: RoleAssignment[] = []): string {
   const entries = report.resolutions
     .filter((resolution) => resolution.status === "resolved" && resolution.primary)
     .map((resolution) => ({
@@ -71,6 +74,9 @@ function registryJson(report: InstallReport): string {
     note: "Only classes permitted by contentSettings are present. Regenerate after changing settings.",
     contentSettings: report.contentSettings,
     entries,
+    // Listed apart from the classes on purpose: a kit mesh the resolver did not pick
+    // as a class's primary can still be exactly the chair the room needs.
+    roles: sortRoles(roles),
   });
 }
 
@@ -303,11 +309,21 @@ function acquisitionPlan(report: InstallReport): string {
   return `${lines.join("\n")}\n`;
 }
 
-export function emitInstall(outDir: string, report: InstallReport): string[] {
+function sortRoles(roles: RoleAssignment[]): RoleAssignment[] {
+  const byRole = new Map<string, RoleAssignment>();
+  for (const assignment of roles) {
+    if (assignment.role && assignment.path && !byRole.has(assignment.role)) byRole.set(assignment.role, assignment);
+  }
+  return [...byRole.values()].sort((left, right) =>
+    left.role < right.role ? -1 : left.role > right.role ? 1 : 0,
+  );
+}
+
+export function emitInstall(outDir: string, report: InstallReport, roles: RoleAssignment[] = []): string[] {
   const written: string[] = [];
 
   write(outDir, UPLUGIN_PATH, upluginFile(), written);
-  write(outDir, REGISTRY_PATH, `${registryJson(report)}\n`, written);
+  write(outDir, REGISTRY_PATH, `${registryJson(report, roles)}\n`, written);
   write(outDir, HEADER_PATH, headerFile(), written);
   write(outDir, SOURCE_PATH, sourceFile(), written);
   write(outDir, MODULE_PATH, moduleFile(), written);

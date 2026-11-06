@@ -815,3 +815,32 @@ Anchors: `HAS.RoomProp.desk`, `.computer`, `.phone`, `.cameraRig`, `.toolRack`,
 Expect the kit's own coordinates not to match these anchors on the first pass; the
 stage is idempotent, so move the actors in the editor or edit the `PROPS` table and
 re-run `props`.
+
+### Drafting that index from inside the editor
+
+`scripts/scan-pack.py` reads the asset registry of a pack you have already imported
+and writes a first-draft library file: every static mesh with its `/Game` path, LOD
+count, triangle count and folder tags, plus a guessed `role` for each room anchor
+whose name matches (`chair`, `desk`, `monitor`, `phone`, `camera`, `shelf`, `drain`,
+`lamp`). It modifies nothing.
+
+```powershell
+curl.exe -L -o scripts\scan-pack.py "https://raw.githubusercontent.com/erschindler/house-arrest/main/scripts/scan-pack.py"
+```
+
+Then, with the project open, either run it as a commandlet or paste this into the
+Output Log's Python console:
+
+```python
+exec(open(r"C:\ha34\scripts\scan-pack.py").read())
+```
+
+Set `HAS_PACK=/Game/Fab/TheForgottenRoom` to scan one folder (the default scans all of
+`/Game` except `HASContent` and `Maps`), and `HAS_OUT` for the file to write. The role
+guesses are guesses: read the file, fix the anchors that landed on the wrong mesh, and
+fill in any `triangles: 0` it reported as unreadable before trusting a class budget.
+
+Role assignments no longer depend on a content class picking the asset: they are
+written to the registry's own `roles` list, so a kit mesh with one LOD still becomes
+the chair. What still needs checking is the path itself — `verify` fails the pipeline
+if a registered path is not in the engine.

@@ -1231,10 +1231,18 @@ def role_art():
         return {}
 
     roles = {}
+    # Assignments are listed apart from the content classes, so an anchor still gets
+    # its mesh when the asset was not picked as any class's primary. Entries that
+    # carry a role themselves are honoured too, for registries written before this.
+    for assignment in registry.get("roles", []):
+        role = assignment.get("role", "")
+        path = assignment.get("path", "")
+        if role and path:
+            roles[role] = path
     for entry in registry.get("entries", []):
         role = entry.get("role", "")
         path = entry.get("path", "")
-        if role and path:
+        if role and path and role not in roles:
             roles[role] = path
     return roles
 

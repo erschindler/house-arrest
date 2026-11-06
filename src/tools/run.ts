@@ -246,7 +246,12 @@ function main(): void {
         }
       } else if (stage.id === "content") {
         if (!report) throw new Error("the resolve stage did not produce a report");
-        const written = emitInstall(options.projectDir, report);
+        // Roles come from the whole library, not only from the resolved primaries: a
+        // kit mesh can be exactly the chair even when no content class picked it.
+        const roles = (library?.assets ?? [])
+          .filter((asset) => asset.role !== undefined)
+          .map((asset) => ({ role: asset.role as string, path: asset.id }));
+        const written = emitInstall(options.projectDir, report, roles);
         console.log(`  wrote ${written.length} files into ${options.projectDir}`);
       } else if (stage.id === "project") {
         // The room stage builds the level, so the config may only claim it as the

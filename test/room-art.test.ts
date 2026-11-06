@@ -71,3 +71,26 @@ test("the props stage prefers registry art and keeps the placeholder fallback", 
   assert.match(script, /roles\.get\(tag/);
   assert.match(script, /CUBE = "\/Engine\/BasicShapes\/Cube\.Cube"/);
 });
+
+test("a role reaches the registry even when no content class claims the asset", () => {
+  const projectDir = join(OUT, "project-roles");
+  const report = buildReport(new ContentGate(devUnrestrictedSettings()), { assets: [] });
+  emitInstall(projectDir, report, [
+    { role: "HAS.RoomProp.chair", path: "/Game/Fab/TheForgottenRoom/SM_Chair" },
+    { role: "HAS.RoomProp.chair", path: "/Game/Fab/TheForgottenRoom/SM_Chair_Duplicate" },
+  ]);
+
+  const registry = JSON.parse(
+    readFileSync(join(projectDir, "Plugins/HASContent/Content/Data/HASAssetRegistry.json"), "utf8"),
+  ) as { roles: { role: string; path: string }[] };
+
+  // One assignment per anchor, first one wins, so the room cannot swap art between runs.
+  assert.deepEqual(registry.roles, [
+    { role: "HAS.RoomProp.chair", path: "/Game/Fab/TheForgottenRoom/SM_Chair" },
+  ]);
+});
+
+test("the props stage reads standalone role assignments, not only class entries", () => {
+  const script = readFileSync(join(OUT, "systems", "Scripts", "has_build_room_props.py"), "utf8");
+  assert.match(script, /registry\.get\("roles"/);
+});
