@@ -531,10 +531,22 @@ Open the project directly, which bypasses the selector entirely:
 ```
 
 To make double-click work as well, right-click the `.uproject` → **Switch Unreal
-Engine Version…** and pick 5.8, or do it without a dialog:
+Engine Version…** and pick 5.8.
+
+`UnrealVersionSelector.exe` is shipped by the Epic Games Launcher, **not** by the
+engine: it is not in `UE_5.8\Engine\Binaries\Win64\`. Find the copy on this machine:
 
 ```powershell
-& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealVersionSelector.exe" `
+Get-ChildItem "C:\Program Files\Epic Games\Launcher",
+              "C:\Program Files (x86)\Epic Games\Launcher" `
+  -Recurse -Filter UnrealVersionSelector.exe -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty FullName
+```
+
+Then associate without a dialog, using the path that printed:
+
+```powershell
+& "<the UnrealVersionSelector.exe it printed>" `
   /switchversionsilent "C:\HouseArrest\ue\HouseArrest\HouseArrest.uproject" `
   "C:\Program Files\Epic Games\UE_5.8"
 ```
