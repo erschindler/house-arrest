@@ -38,6 +38,7 @@ const UPLUGIN_PATH = `${PLUGIN_ROOT}/HASContent.uplugin`;
 const REGISTRY_PATH = `${PLUGIN_ROOT}/Content/Data/HASAssetRegistry.json`;
 const HEADER_PATH = `${PLUGIN_ROOT}/Source/HASContent/Public/HASContentSubsystem.h`;
 const SOURCE_PATH = `${PLUGIN_ROOT}/Source/HASContent/Private/HASContentSubsystem.cpp`;
+const MODULE_PATH = `${PLUGIN_ROOT}/Source/HASContent/Private/HASContentModule.cpp`;
 const BUILD_PATH = `${PLUGIN_ROOT}/Source/HASContent/HASContent.Build.cs`;
 const CHECKLIST_PATH = "Docs/IMPORT_CHECKLIST.csv";
 const PLAN_PATH = "Docs/FAB_ACQUISITION_PLAN.md";
@@ -192,6 +193,22 @@ int32 UHASContentSubsystem::NumRegisteredClasses() const
 `;
 }
 
+/**
+ * The module implementation.
+ *
+ * UBT generates one when a module has none, but a plugin module that relies on it
+ * loads on macOS and Linux and fails on Win64 with "could not be initialized
+ * successfully after it was loaded". An explicit IMPLEMENT_MODULE in the plugin's
+ * own DLL is the difference.
+ */
+function moduleFile(): string {
+  return `// GENERATED — do not edit by hand.
+#include "Modules/ModuleManager.h"
+
+IMPLEMENT_MODULE(FDefaultModuleImpl, HASContent);
+`;
+}
+
 function buildFile(): string {
   return `// GENERATED — do not edit by hand.
 using UnrealBuildTool;
@@ -285,6 +302,7 @@ export function emitInstall(outDir: string, report: InstallReport): string[] {
   write(outDir, REGISTRY_PATH, `${registryJson(report)}\n`, written);
   write(outDir, HEADER_PATH, headerFile(), written);
   write(outDir, SOURCE_PATH, sourceFile(), written);
+  write(outDir, MODULE_PATH, moduleFile(), written);
   write(outDir, BUILD_PATH, buildFile(), written);
   write(outDir, CHECKLIST_PATH, checklistCsv(report), written);
   write(outDir, PLAN_PATH, acquisitionPlan(report), written);
