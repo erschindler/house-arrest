@@ -152,16 +152,6 @@ test("the scaffold is a plugin-aware project with the editor scripts", () => {
   assert.ok(plugins.includes("EditorScriptingUtilities"), "EditorAssetLibrary lives in this plugin");
   assert.ok(uproject.Plugins.every((plugin) => plugin.Enabled));
 
-  const pluginModule = readFileSync(
-    join(dir, "Plugins/HASContent/Source/HASContent/Private/HASContentModule.cpp"),
-    "utf8",
-  );
-  assert.match(
-    pluginModule,
-    /IMPLEMENT_MODULE\(FDefaultModuleImpl, HASContent\)/,
-    "a plugin module without an explicit implementation fails to load on Win64",
-  );
-
   for (const source of written.filter((file) => file.endsWith(".h") || file.endsWith(".cpp"))) {
     const text = readFileSync(join(dir, source), "utf8");
     assert.ok(

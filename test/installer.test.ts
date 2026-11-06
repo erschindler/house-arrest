@@ -68,7 +68,16 @@ test("the emitter writes a registry containing only permitted classes", () => {
   const dir = "artifacts/installer-test";
   const written = emitInstall(dir, report);
 
-  assert.ok(written.length >= 8);
+  assert.ok(written.length >= 9);
+
+  // A plugin module without its own IMPLEMENT_MODULE fails to load on Win64 with
+  // "could not be initialized successfully after it was loaded".
+  assert.ok(written.includes("Plugins/HASContent/Source/HASContent/Private/HASContentModule.cpp"));
+  assert.match(
+    readFileSync(join(dir, "Plugins/HASContent/Source/HASContent/Private/HASContentModule.cpp"), "utf8"),
+    /IMPLEMENT_MODULE\(FDefaultModuleImpl, HASContent\)/,
+    "the plugin module needs an explicit implementation",
+  );
 
   const registry = JSON.parse(
     readFileSync(join(dir, "Plugins/HASContent/Content/Data/HASAssetRegistry.json"), "utf8"),
