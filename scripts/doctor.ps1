@@ -422,6 +422,10 @@ if ($node.Code -eq 0 -and $projectProblems -eq 0) {
 
 # ---------------------------------------------------------------- build
 
+# Set only when the pipeline runs to completion, so the last line can distinguish
+# "this machine could build" from "it did build".
+$script:PipelineOk = $false
+
 Section "Pipeline"
 if (-not $Build) {
     Note "-Build not given: nothing was generated, compiled or packaged"
@@ -441,7 +445,9 @@ if (-not $Build) {
     ) $Project
     Save "pipeline.txt" ($pipeline.Output + "`r`nexit " + $pipeline.Code)
     if ($pipeline.Code -eq 0) {
-        Ok "pipeline finished; summary is in pipeline.txt"
+        $script:PipelineOk = $true
+        Ok "pipeline finished; full log in pipeline.txt"
+        Say (Tail $pipeline.Output 12)
     } else {
         Fail ("pipeline exited " + $pipeline.Code + "; first useful lines below, full log in pipeline.txt")
         Say (Tail $pipeline.Output 25)
@@ -453,10 +459,18 @@ if (-not $Build) {
 Say ""
 Say "-- summary --"
 if ($script:Failures.Count -eq 0) {
-    Say "RESULT: this machine can run the offline stages"
+    if ($script:PipelineOk) {
+        Say ("RESULT: pipeline completed; artifacts are in " + (Join-Path $Project "artifacts"))
+    } else {
+        Say "RESULT: this machine can run the offline stages"
+    }
 } else {
     foreach ($problem in $script:Failures) { Say ("  * " + $problem) }
-    Say ("RESULT: " + $script:Failures.Count + " problem(s) to fix before an Unreal build")
+    if ($Build) {
+        Say ("RESULT: " + $script:Failures.Count + " problem(s) from this run; see the logs above")
+    } else {
+        Say ("RESULT: " + $script:Failures.Count + " problem(s) to fix before an Unreal build")
+    }
 }
 Save "environment.txt" ($script:Lines -join "`r`n")
 
