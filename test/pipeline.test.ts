@@ -161,7 +161,10 @@ test("the scaffold is a plugin-aware project with the editor scripts", () => {
       /BuildSettingsVersion\.Latest/,
       "a pinned version uses older defaults, which the editor target may not override",
     );
-    assert.doesNotMatch(rules, /BuildSettingsVersion\.V\d/);
+    assert.ok(
+      !/BuildSettingsVersion\.V\d/.test(rules),
+      "no pinned major version may come back",
+    );
   }
 
   const module = readFileSync(join(dir, "Source/HouseArrest/HouseArrest.Build.cs"), "utf8");
