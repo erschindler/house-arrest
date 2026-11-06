@@ -861,6 +861,15 @@ curl.exe -L -o scripts\doctor.ps1 "https://raw.githubusercontent.com/erschindler
 powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1
 ```
 
+A raw file on `main` can still be served from GitHub's cache for a few minutes after a
+push, so a fetch straight after an update may hand you the previous revision. Pin the
+commit when that matters, since a commit URL is immutable:
+
+```powershell
+curl.exe -L -o scripts\doctor.ps1 "https://raw.githubusercontent.com/erschindler/house-arrest/8d3f206/scripts/doctor.ps1"
+(Get-Item scripts\doctor.ps1).Length   # 17751 bytes for that revision
+```
+
 The script itself does not care where it is invoked from: `-Project` defaults to
 `C:\ha10\house-arrest-main`, so the absolute form works from any directory:
 
