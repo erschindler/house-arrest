@@ -133,7 +133,8 @@ function contactHeader(project: string): string {
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "HASSurfaceTypes.generated.h"
+#include "HASSurfaceTypes.h"
+#include "HASPhysicsContactComponent.generated.h"
 
 class UHASWoundComponent;
 class UPrimitiveComponent;
@@ -382,7 +383,8 @@ function woundHeader(project: string): string {
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "HASSurfaceTypes.generated.h"
+#include "HASSurfaceTypes.h"
+#include "HASWoundComponent.generated.h"
 
 class UHASContentSubsystem;
 class UDecalComponent;
@@ -629,7 +631,8 @@ function dismembermentHeader(project: string): string {
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "HASSurfaceTypes.generated.h"
+#include "HASSurfaceTypes.h"
+#include "HASDismembermentComponent.generated.h"
 
 class USkeletalMeshComponent;
 class UStaticMeshComponent;
@@ -791,7 +794,8 @@ function voiceHeader(project: string): string {
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "HASSurfaceTypes.generated.h"
+#include "HASSurfaceTypes.h"
+#include "HASVoiceComponent.generated.h"
 
 class UAudioComponent;
 class USoundBase;
@@ -914,7 +918,8 @@ function productionHeader(project: string): string {
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "HASSurfaceTypes.generated.h"
+#include "HASSurfaceTypes.h"
+#include "HASProductionComponent.generated.h"
 
 UENUM(BlueprintType)
 enum class EHASEquipment : uint8 { CameraTier, Tripod, Lighting, Microphone, ToolSet, Furniture, Drainage };

@@ -165,6 +165,24 @@ test("the scaffold is a plugin-aware project with the editor scripts", () => {
   );
   assert.match(physics, /class HOUSEARREST_API UHASPhysicsContactComponent/);
 
+  // UHT wants each header that declares a UCLASS to end with its own generated
+  // include. A foreign *.generated.h in that position is rejected at build time.
+  for (const header of written.filter((file) => file.endsWith(".h"))) {
+    const text = readFileSync(join(dir, header), "utf8");
+    if (!text.includes("UCLASS(")) continue;
+    const includes = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("#include \""))
+      .map((line) => line.replace(/^#include "/, "").replace(/"$/, ""));
+    const own = (header.split("/").pop() ?? "").replace(/\.h$/, ".generated.h");
+    assert.equal(
+      includes[includes.length - 1],
+      own,
+      `${header} must end with #include "${own}"`,
+    );
+  }
+
   const targets = written.filter((file) => file.endsWith(".Target.cs"));
   assert.equal(targets.length, 2, "game and editor targets");
   for (const target of targets) {
