@@ -851,9 +851,21 @@ if a registered path is not in the engine.
 It installs nothing, downloads nothing, and writes nothing into `src/`, `test/` or the
 generated Unreal project.
 
+Run it from the project folder, because `scripts\` is relative to wherever the shell
+is sitting (`curl: (23) ... No such file or directory` means the shell was somewhere
+else):
+
 ```powershell
+cd C:\ha10\house-arrest-main
 curl.exe -L -o scripts\doctor.ps1 "https://raw.githubusercontent.com/erschindler/house-arrest/main/scripts/doctor.ps1"
 powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1
+```
+
+The script itself does not care where it is invoked from: `-Project` defaults to
+`C:\ha10\house-arrest-main`, so the absolute form works from any directory:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\ha10\house-arrest-main\scripts\doctor.ps1
 ```
 
 It reports Node and npm; Git and Git LFS (noticed, not required by the pipeline);
