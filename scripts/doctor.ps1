@@ -32,11 +32,18 @@
 .PARAMETER Build
     Run the pipeline's engine stages as well. Editor must be closed.
 
+.PARAMETER Drop
+    Folder holding extracted Fab packs, passed to the pipeline as --drop. Without it
+    the pipeline skips its import stage and builds with placeholder props only.
+
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1 -Build
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1 -Build -Drop C:\HouseArrest\drop
 #>
 [CmdletBinding()]
 param(
@@ -44,6 +51,7 @@ param(
     [string]$Library = "C:\HouseArrest\library",
     [string]$EngineRoot = "",
     [string]$Diagnostics = "C:\HouseArrest\diagnostics",
+    [string]$Drop = "",
     [switch]$Build
 )
 
@@ -433,16 +441,25 @@ if (-not $Build) {
     Fail "-Build needs Unreal Engine; none was found"
 } elseif ($null -ne $running) {
     Fail "-Build refused: close the Unreal editor first (its DLLs are locked during the link)"
+} elseif ($Drop -ne "" -and -not (Test-Path -LiteralPath $Drop)) {
+    Fail ("-Build needs the drop folder at " + $Drop + " (or omit -Drop)")
 } elseif (-not (Test-Path -LiteralPath $Library)) {
     Fail ("-Build needs the asset library at " + $Library + " (pass -Library)")
 } else {
-    $pipeline = Invoke-Captured "npm.cmd" @(
+    if ($Drop -eq "") {
+        Note "no -Drop given: the import stage is skipped, so no pack art enters the build"
+    } else {
+        Note ("drop folder: " + $Drop)
+    }
+    $pipelineArgs = @(
         "run", "run", "--",
         "--library", $Library,
         "--engine-root", $script:EnginePath,
         "--engine", $script:EngineVersion,
         "--settings", "dev"
-    ) $Project
+    )
+    if ($Drop -ne "") { $pipelineArgs = $pipelineArgs + @("--drop", $Drop) }
+    $pipeline = Invoke-Captured "npm.cmd" $pipelineArgs $Project
     Save "pipeline.txt" ($pipeline.Output + "`r`nexit " + $pipeline.Code)
     if ($pipeline.Code -eq 0) {
         $script:PipelineOk = $true

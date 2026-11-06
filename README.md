@@ -896,6 +896,14 @@ editor is open, because the link fails on locked DLLs:
 powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1 -Build
 ```
 
+Add `-Drop` pointing at the folder holding your extracted Fab packs to run the import
+stage too. Without it the pipeline skips that stage by design, which is why a build can
+finish cleanly with only placeholder props in the room:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1 -Build -Drop C:\HouseArrest\drop
+```
+
 Reports go to `C:\HouseArrest\diagnostics` (created if missing, never inside the source
 tree) as `environment.txt`, `typescript.txt` and, with `-Build`, `pipeline.txt`. The
 names are fixed so two runs diff cleanly. The exit code is 1 when anything is missing,
