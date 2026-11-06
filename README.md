@@ -475,6 +475,9 @@ resolve. Fix the index or the pack and re-run; the pipeline is idempotent.
 - **After `room` and `props`:** a level whose concealed volume is tagged
   `HAS.HiddenRoom` and whose props are tagged `HAS.RoomProp.*` — grey boxes at the
   anchors, because no meshes have been assigned yet.
+- **When the project opens:** the editor starts on `/Game/Maps/HouseArrest`, the level
+  `room` builds, and so does the packaged build. A run without an engine keeps the
+  engine's `Entry` map instead, because nothing would ever create the level.
 - **After `build`:** a compiled `HouseArrestEditor`. The first compile is where the
   generated C++ meets the real API; expect to fix an include or a signature.
 

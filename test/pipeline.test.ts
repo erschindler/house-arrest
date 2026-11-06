@@ -117,6 +117,31 @@ test("tool paths follow the platform", () => {
   assert.match(engineTools("/opt/UE", "linux").editor, /Linux[\\/]UnrealEditor-Cmd$/);
 });
 
+test("the startup map is claimed only when the room stage will build it", () => {
+  const offline = "artifacts/project-offline";
+  emitProject(offline, { projectName: "HouseArrest", engineAssociation: "5.8" });
+  const entry = readFileSync(join(offline, "Config/DefaultEngine.ini"), "utf8");
+  assert.match(
+    entry,
+    /GameDefaultMap=\/Engine\/Maps\/Entry/,
+    "without an engine no level is ever created, so the engine Entry map stays",
+  );
+
+  const withRoom = "artifacts/project-with-room";
+  emitProject(withRoom, {
+    projectName: "HouseArrest",
+    engineAssociation: "5.8",
+    defaultMap: "/Game/Maps/HouseArrest",
+  });
+  const room = readFileSync(join(withRoom, "Config/DefaultEngine.ini"), "utf8");
+  assert.match(
+    room,
+    /GameDefaultMap=\/Game\/Maps\/HouseArrest/,
+    "the packaged build has to boot into the room, not an empty engine map",
+  );
+  assert.match(room, /EditorStartupMap=\/Game\/Maps\/HouseArrest/);
+});
+
 test("preflight explains where to point --engine-root", () => {
   const problems = preflightProblems(options({ engineRoot: "C:/definitely/not/an/engine" }));
 

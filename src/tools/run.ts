@@ -210,9 +210,14 @@ function main(): void {
         const written = emitInstall(options.projectDir, report);
         console.log(`  wrote ${written.length} files into ${options.projectDir}`);
       } else if (stage.id === "project") {
+        // The room stage builds the level, so the config may only claim it as the
+        // startup map when that stage is actually going to run. Otherwise the editor
+        // and the packaged build keep the engine's Entry map, which is empty.
+        const roomPlanned = plan.some((entry) => entry.id === "room" && !entry.skipReason);
         const written = emitProject(options.projectDir, {
           projectName: options.projectName,
           engineAssociation: options.engineAssociation,
+          defaultMap: roomPlanned ? arg("level", "/Game/Maps/HouseArrest") : null,
         });
         console.log(`  wrote ${written.length} files (uproject, targets, module, python)`);
       } else if (stage.command) {
