@@ -511,6 +511,38 @@ runs `Build.bat` / `RunUAT.bat` through `cmd.exe`, never through PowerShell.
 | `-run=pythonscript` does nothing | The `PythonScriptPlugin` is disabled. The generated `.uproject` enables it; a hand-merged project may not. |
 | `EditorAssetLibrary` is `None` | `EditorScriptingUtilities` disabled, same fix. |
 | build fails on `cl.exe` | The VS C++ workload is missing, or you are in a plain "Developer Command Prompt" instead of letting UBT find MSVC. |
+| `Could not find a suitable Unreal Engine for the selected uproject` | Double-clicking a `.uproject` goes through `UnrealVersionSelector.exe`, which resolves `EngineAssociation` (`"5.8"`) against Epic's registry install list — not against `--engine-root`. The engine builds and runs fine and is simply not registered there. See below. |
+
+### Double-clicking the `.uproject` says no engine was found
+
+The generated `.uproject` carries `"EngineAssociation": "5.8"`, which is correct for
+a launcher install of UE 5.8. Windows still opens the file through
+`UnrealVersionSelector.exe`, and that tool looks the association up in
+`HKCU\Software\Epic Games\Unreal Engine\Builds` and the launcher's install list. If
+that lookup finds nothing, you get the associate-an-engine dialog even though the
+engine is healthy — `build`, `verify`, `room`, `props` and `package` never consult it,
+because they launch the engine binary by path.
+
+Open the project directly, which bypasses the selector entirely:
+
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" `
+  "C:\HouseArrest\ue\HouseArrest\HouseArrest.uproject"
+```
+
+To make double-click work as well, right-click the `.uproject` → **Switch Unreal
+Engine Version…** and pick 5.8, or do it without a dialog:
+
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealVersionSelector.exe" `
+  /switchversionsilent "C:\HouseArrest\ue\HouseArrest\HouseArrest.uproject" `
+  "C:\Program Files\Epic Games\UE_5.8"
+```
+
+That rewrites `EngineAssociation` to whatever identifier the selector uses on this
+machine, so expect the field to stop reading `5.8` afterwards. The pipeline does not
+read it back; re-running `project` overwrites the file with `5.8` again. The engine
+path must stay the folder *above* `Engine`, not the `Engine` folder itself.
 | import "succeeds" but imports nothing | The drop folder only has `.zip`/`.rar` in it. Extract first; the script walks files, it does not unpack archives. |
 | Everything is slow the first time | Derived data cache. It is a one-time cost of 10–40 minutes. |
 

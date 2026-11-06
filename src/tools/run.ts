@@ -37,7 +37,7 @@ import { buildReport } from "./resolver.ts";
 import type { InstallReport } from "./resolver.ts";
 import { emitInstall } from "./ue5.ts";
 import { emitProject } from "./project.ts";
-import { batchArguments, planStages, preflightProblems } from "./pipeline.ts";
+import { batchArguments, engineTools, planStages, preflightProblems } from "./pipeline.ts";
 import type { RunOptions, StageId } from "./pipeline.ts";
 
 function arg(name: string, fallback: string): string {
@@ -275,6 +275,23 @@ function main(): void {
   console.log(`summary: ${join(options.outDir, "run-summary.json")}`);
   if (skipped.length > 0) {
     console.log(`skipped: ${skipped.join(", ")} — see the plan above for why.`);
+  }
+
+  // Double-clicking the .uproject goes through UnrealVersionSelector, which resolves
+  // EngineAssociation through the launcher's registry entries, not through
+  // --engine-root. A machine can build and package this project perfectly and still
+  // have no registration for "5.8", which surfaces as "Could not find a suitable
+  // Unreal Engine ... Please associate an engine". Printing a command that names the
+  // editor binary directly sidesteps that lookup entirely.
+  if (options.engineRoot !== null) {
+    const editor = engineTools(options.engineRoot, options.platform).editor.replace(
+      /UnrealEditor-Cmd(\.exe)?$/,
+      "UnrealEditor$1",
+    );
+    if (existsSync(editor)) {
+      const uproject = join(resolve(options.projectDir), `${options.projectName}.uproject`);
+      console.log(`open:    "${editor}" "${uproject}"`);
+    }
   }
 }
 
