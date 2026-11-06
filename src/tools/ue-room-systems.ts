@@ -1206,6 +1206,11 @@ PROPS = [
 
 
 def spawn(tag, mesh_path, location, extent):
+    # Re-running the stage replaces its props instead of stacking a second set.
+    for existing in unreal.EditorLevelLibrary.get_all_level_actors():
+        if existing.get_actor_label() == tag:
+            unreal.EditorLevelLibrary.destroy_actor(existing)
+
     actor = unreal.EditorLevelLibrary.spawn_actor_from_class(
         unreal.StaticMeshActor, unreal.Vector(*location), unreal.Rotator(0, 0, 0)
     )

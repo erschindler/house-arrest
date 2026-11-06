@@ -514,6 +514,7 @@ runs `Build.bat` / `RunUAT.bat` through `cmd.exe`, never through PowerShell.
 | `-run=pythonscript` does nothing | The `PythonScriptPlugin` is disabled. The generated `.uproject` enables it; a hand-merged project may not. |
 | `EditorAssetLibrary` is `None` | `EditorScriptingUtilities` disabled, same fix. |
 | build fails on `cl.exe` | The VS C++ workload is missing, or you are in a plain "Developer Command Prompt" instead of letting UBT find MSVC. |
+| Viewport is black, but actor labels are visible | `new_level` makes a level with no light, so every mesh is a black silhouette. The room stage now adds a key light, sky and skylight; re-run it — it replaces its own actors instead of stacking a second set. |
 | `Could not find a suitable Unreal Engine for the selected uproject` | Double-clicking a `.uproject` goes through `UnrealVersionSelector.exe`, which resolves `EngineAssociation` (`"5.8"`) against Epic's registry install list — not against `--engine-root`. The engine builds and runs fine and is simply not registered there. See below. |
 
 ### Double-clicking the `.uproject` says no engine was found

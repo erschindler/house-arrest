@@ -1468,6 +1468,10 @@ A generated project ships no map, so if the level is missing this creates an emp
 one, and if no room root is tagged it places a placeholder at the origin. That is
 enough to run the stage and see the result; it is not a house.
 
+An empty level also ships no lighting and no player start, so this adds a key light,
+sky atmosphere and skylight, plus a start point outside the room. Without them the
+viewport is black and Play spawns the camera inside a solid box.
+
 This script has not been executed outside a real editor. Treat the first run as a
 debugging session.
 """
@@ -1499,7 +1503,52 @@ def room_root():
     return None
 
 
+def clear_label(label):
+    # Re-running the stage replaces its own actors instead of stacking a second set
+    # on top of the first.
+    for actor in actors():
+        if actor.get_actor_label() == label:
+            unreal.EditorLevelLibrary.destroy_actor(actor)
+
+
+def class_name(actor):
+    return actor.get_class().get_name()
+
+
+def add_lighting():
+    """new_level() creates a world with no lights: every actor renders black.
+
+    This is what the engine's Basic level template ships with, minus fog and clouds.
+    """
+    for actor in actors():
+        if "Light" in class_name(actor) or "Sky" in class_name(actor):
+            return False
+
+    for cls, location, rotation, label in (
+        (unreal.DirectionalLight, unreal.Vector(0, 0, 1500), unreal.Rotator(-50, -30, 0), "HAS_KeyLight"),
+        (unreal.SkyAtmosphere, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0), "HAS_Sky"),
+        (unreal.SkyLight, unreal.Vector(0, 0, 800), unreal.Rotator(0, 0, 0), "HAS_SkyLight"),
+    ):
+        actor = unreal.EditorLevelLibrary.spawn_actor_from_class(cls, location, rotation)
+        actor.set_actor_label(label)
+    return True
+
+
+def add_player_start():
+    """Without one, Play puts the camera at the origin, inside the room box."""
+    for actor in actors():
+        if class_name(actor) == "PlayerStart":
+            return False
+
+    start = unreal.EditorLevelLibrary.spawn_actor_from_class(
+        unreal.PlayerStart, unreal.Vector(0, -900, 200), unreal.Rotator(0, 90, 0)
+    )
+    start.set_actor_label("HAS_PlayerStart")
+    return True
+
+
 def spawn_box(location, extent, label):
+    clear_label(label)
     actor = unreal.EditorLevelLibrary.spawn_actor_from_class(
         unreal.StaticMeshActor, location, unreal.Rotator(0, 0, 0)
     )
@@ -1542,6 +1591,11 @@ def main():
         root = spawn_box(unreal.Vector(0, 0, 0), (500, 400, 20), "HAS_Room_%s" % ROOM_ID)
         root.set_editor_property("tags", [unreal.Name("HAS.Room." + ROOM_ID)])
         print("HAS: no HAS.Room.%s actor; placed a placeholder room root" % ROOM_ID)
+
+    if add_lighting():
+        print("HAS: the level had no lights; added a key light, sky and skylight")
+    if add_player_start():
+        print("HAS: added HAS_PlayerStart outside the room, so Play is not inside a wall")
 
     origin = root.get_actor_location()
     hidden = spawn_box(
