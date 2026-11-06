@@ -382,10 +382,13 @@ separately and assign them after the first build.
 1. Claim the packs on Fab.
 2. Download them. The Fab plugin's **Add to Project** puts content straight into
    `Content/`; the web library gives you a zip. For this pipeline, prefer the zip.
-3. Extract every zip into one flat folder, e.g. `D:/Fab`, so each pack is its own
-   subfolder. **The import script walks files; it does not unpack archives**, and it
-   ignores nested zips. If `--drop` contains only `.zip` files, `import` will
-   "succeed" with nothing imported.
+3. Extract every pack zip into one flat folder, e.g. `C:/HouseArrest/Fab`, so each
+   pack is its own subfolder. Extract the packs by name, not every zip in
+   `Downloads`. **The import script walks files; it does not unpack archives.** Source
+   files (`.fbx`, `.obj`, `.abc`, `.png`, `.tga`, `.exr`, `.wav`) are imported; a
+   built pack of `.uasset`/`.umap` files is copied into `Content/HASContent`, since
+   those files are already assets. A folder with neither fails the stage and logs a
+   count of the extensions it found, and preflight refuses it before the build.
 
 ## 4.5 Write the library index
 
@@ -515,6 +518,7 @@ runs `Build.bat` / `RunUAT.bat` through `cmd.exe`, never through PowerShell.
 | `EditorAssetLibrary` is `None` | `EditorScriptingUtilities` disabled, same fix. |
 | build fails on `cl.exe` | The VS C++ workload is missing, or you are in a plain "Developer Command Prompt" instead of letting UBT find MSVC. |
 | `LNK1104: cannot open file ... UnrealEditor-HouseArrest.dll` | An Unreal editor is open and has the module DLLs loaded, so the linker cannot rewrite them. Save the level, close the editor, re-run. The pipeline now refuses engine stages while those binaries are locked, instead of letting UBT retry for twenty seconds. |
+| `HAS: nothing importable under ...` | The drop folder holds no `.uasset`/`.fbx`/`.png`. The log line lists what it found — e.g. `.lua=60, .ts=74, .pr0=35` means unrelated downloads were extracted there. Point `--drop` at the extracted pack, or omit `--drop`. Preflight now reports this before spending a build on it. |
 | Viewport is black, but actor labels are visible | `new_level` makes a level with no light, so every mesh is a black silhouette. The room stage now adds a key light, sky and skylight; re-run it — it replaces its own actors instead of stacking a second set. |
 | `Could not find a suitable Unreal Engine for the selected uproject` | Double-clicking a `.uproject` goes through `UnrealVersionSelector.exe`, which resolves `EngineAssociation` (`"5.8"`) against Epic's registry install list — not against `--engine-root`. The engine builds and runs fine and is simply not registered there. See below. |
 

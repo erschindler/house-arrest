@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { emitProject } from "../src/tools/project.ts";
 import {
@@ -140,6 +140,27 @@ test("the startup map is claimed only when the room stage will build it", () => 
     "the packaged build has to boot into the room, not an empty engine map",
   );
   assert.match(room, /EditorStartupMap=\/Game\/Maps\/HouseArrest/);
+});
+
+test("preflight rejects a drop folder with nothing the importer can use", () => {
+  const junk = "artifacts/drop-junk";
+  mkdirSync(junk, { recursive: true });
+  writeFileSync(join(junk, "notes.txt"), "not content");
+  const problems = preflightProblems(options({ dropDir: junk }));
+  assert.ok(
+    problems.some((problem) => problem.includes("no content the importer can use")),
+    "a folder of unrelated files has to fail before the build, not after it",
+  );
+
+  const pack = "artifacts/drop-pack";
+  mkdirSync(join(pack, "Props"), { recursive: true });
+  writeFileSync(join(pack, "Props/SM_Wall.uasset"), "x");
+  const accepted = preflightProblems(options({ dropDir: pack }));
+  assert.equal(
+    accepted.filter((problem) => problem.includes("drop folder")).length,
+    0,
+    "a folder holding .uasset content is accepted",
+  );
 });
 
 test("preflight explains where to point --engine-root", () => {

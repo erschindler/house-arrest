@@ -10,7 +10,7 @@
  * so the offline half of the machine works on a laptop with no Unreal install.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 export type StageId =
@@ -274,6 +274,36 @@ export function planStages(options: RunOptions): PlannedStage[] {
   });
 }
 
+// What the generator's import stage accepts. Source formats are imported, built
+// .uasset/.umap packs are adopted by copying; anything else in the folder is ignored,
+// so a folder of unrelated files would only fail after a full build.
+const IMPORTABLE_EXTENSIONS = new Set([".fbx", ".obj", ".abc", ".png", ".tga", ".exr", ".wav"]);
+const PACKED_EXTENSIONS = new Set([".uasset", ".umap"]);
+
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot <= 0 ? "" : name.slice(dot).toLowerCase();
+}
+
+/** Counts file extensions under a drop folder, so preflight can report its contents. */
+function dropCensus(root: string, counts = new Map<string, number>(), depth = 0): Map<string, number> {
+  if (depth > 12) return counts;
+
+  let entries: string[];
+  try {
+    entries = readdirSync(root);
+  } catch {
+    // Not a directory, so it is a file: readdirSync is the only stat this project's
+    // dependency-free fs shim offers.
+    const extension = extensionOf(root) || "(none)";
+    counts.set(extension, (counts.get(extension) ?? 0) + 1);
+    return counts;
+  }
+
+  for (const entry of entries) dropCensus(join(root, entry), counts, depth + 1);
+  return counts;
+}
+
 /**
  * Things that stop the run before it starts. Only genuinely unfixable-by-continuing
  * problems belong here: a missing library or a wrong --engine-root. Missing engine
@@ -299,6 +329,27 @@ export function preflightProblems(options: RunOptions): string[] {
 
   if (options.dropDir !== null && !existsSync(options.dropDir)) {
     problems.push(`drop folder not found: ${options.dropDir}`);
+  }
+
+  if (options.dropDir !== null && existsSync(options.dropDir)) {
+    const counts = dropCensus(options.dropDir);
+    let usable = 0;
+    for (const [extension, count] of counts) {
+      if (IMPORTABLE_EXTENSIONS.has(extension) || PACKED_EXTENSIONS.has(extension)) usable += count;
+    }
+
+    if (usable === 0) {
+      const summary =
+        counts.size === 0
+          ? "the folder is empty"
+          : [...counts]
+              .sort((left, right) => left[0].localeCompare(right[0]))
+              .map(([extension, count]) => `${extension}=${count}`)
+              .join(", ");
+      problems.push(
+        `drop folder has no content the importer can use (${summary}): put extracted .uasset packs or .fbx/.png sources in ${options.dropDir}, or omit --drop`,
+      );
+    }
   }
 
   if (options.engineRoot !== null) {
