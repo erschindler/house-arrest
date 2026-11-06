@@ -165,6 +165,21 @@ test("the scaffold is a plugin-aware project with the editor scripts", () => {
   );
   assert.match(physics, /class HOUSEARREST_API UHASPhysicsContactComponent/);
 
+  // Reflected type names are module-global. Two headers declaring the same struct
+  // name is a UHT error: "shares engine name ... with struct".
+  const declared = new Map<string, string>();
+  for (const header of written.filter((file) => file.endsWith(".h"))) {
+    const text = readFileSync(join(dir, header), "utf8");
+    for (const line of text.split("\n")) {
+      const match = /^(?:struct|class)\s+([FU][A-Za-z0-9_]+)\s*$/.exec(line.trim());
+      const name = match?.[1];
+      if (!name) continue;
+      const previous = declared.get(name);
+      assert.equal(previous, undefined, `${name} is declared in both ${previous} and ${header}`);
+      declared.set(name, header);
+    }
+  }
+
   // UHT wants each header that declares a UCLASS to end with its own generated
   // include. A foreign *.generated.h in that position is rejected at build time.
   for (const header of written.filter((file) => file.endsWith(".h"))) {

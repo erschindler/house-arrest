@@ -394,7 +394,7 @@ UENUM(BlueprintType)
 enum class EHASWoundKind : uint8 { Cut, Stab, Burn, Blunt, Amputation };
 
 USTRUCT(BlueprintType)
-struct FHASWound
+struct FHASWoundState
 {
     GENERATED_BODY()
 
@@ -449,7 +449,7 @@ public:
     UFUNCTION(BlueprintPure, Category = "HAS|Wound") float GetPoolMl() const { return PoolMl; }
     UFUNCTION(BlueprintPure, Category = "HAS|Wound") float GetBloodMl() const { return BloodMl; }
 
-    UPROPERTY(BlueprintReadOnly, Category = "HAS|Wound") TArray<FHASWound> Wounds;
+    UPROPERTY(BlueprintReadOnly, Category = "HAS|Wound") TArray<FHASWoundState> Wounds;
     UPROPERTY(BlueprintReadOnly, Category = "HAS|Wound") float BloodMl = 5000.f;
     UPROPERTY(BlueprintReadOnly, Category = "HAS|Wound") float PoolMl = 0.f;
     UPROPERTY(BlueprintReadOnly, Category = "HAS|Wound") int32 Sprays = 0;
@@ -486,7 +486,7 @@ int32 UHASWoundComponent::AddWound(const FHASContactResult& Contact, EHASRegion 
 {
     if (Contact.DepthCm <= 0.f) return 0;
 
-    FHASWound Wound;
+    FHASWoundState Wound;
     Wound.Id = ++Counter;
     Wound.Region = Region;
     Wound.DepthCm = Contact.DepthCm;
@@ -519,7 +519,7 @@ int32 UHASWoundComponent::AddWound(const FHASContactResult& Contact, EHASRegion 
 
 void UHASWoundComponent::Cauterize(int32 WoundId)
 {
-    for (FHASWound& Wound : Wounds)
+    for (FHASWoundState& Wound : Wounds)
     {
         if (Wound.Id != WoundId || Wound.bCauterized) continue;
         Wound.bCauterized = true;
@@ -529,7 +529,7 @@ void UHASWoundComponent::Cauterize(int32 WoundId)
 
 void UHASWoundComponent::StabiliseAll()
 {
-    for (FHASWound& Wound : Wounds)
+    for (FHASWoundState& Wound : Wounds)
     {
         if (Wound.bCauterized) continue;
         Wound.bCauterized = true;
@@ -540,7 +540,7 @@ void UHASWoundComponent::StabiliseAll()
 float UHASWoundComponent::TotalBleed() const
 {
     float Total = 0.f;
-    for (const FHASWound& Wound : Wounds)
+    for (const FHASWoundState& Wound : Wounds)
     {
         if (!Wound.bCauterized) Total += Wound.BleedMlMin;
     }
