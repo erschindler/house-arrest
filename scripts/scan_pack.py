@@ -6,7 +6,7 @@ Run inside Unreal (it needs the asset registry and loadable assets), either:
 
 or paste this one line into the Output Log's Python console:
 
-    exec(open(r"C:\\HouseArrest\\scan_pack.py").read())
+    exec(open(r"C:\\ha10\\house-arrest-main\\scripts\\scan_pack.py").read())
 
 Nothing outside Content/ is touched and no asset is modified: the script reads the
 asset registry, loads each mesh to count LODs, and writes one JSON file. Review it
@@ -61,6 +61,17 @@ def tokens(*parts):
             if token and len(token) > 1:
                 found.add(token)
     return sorted(found)
+
+
+def game_folders(limit=20):
+    """Top-level folders under /Game, so a wrong HAS_PACK is easy to correct."""
+    registry = unreal.AssetRegistryHelpers.get_asset_registry()
+    names = set()
+    for asset in registry.get_assets_by_path("/Game", True):
+        package = str(asset.package_name)
+        if package.startswith("/Game/"):
+            names.add(package.split("/")[2])
+    return sorted(names)[:limit]
 
 
 def scan_roots():
@@ -156,6 +167,11 @@ def main():
 
     if not entries:
         say("no static meshes under %s - set HAS_PACK to the folder Fab imported into" % ", ".join(roots))
+        found = game_folders()
+        if found:
+            say("/Game holds: %s" % ", ".join(found))
+        else:
+            say("/Game holds no assets at all - import the pack into the project first")
         return 1
 
     roles = draft_roles(entries)
