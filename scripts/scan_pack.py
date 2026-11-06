@@ -198,5 +198,14 @@ def main():
     return 0
 
 
-if __name__ == "__main__":
+# Called unconditionally on purpose: -run=pythonscript imports this file as a module
+# named after the file, so __name__ is never "__main__" and the usual guard would
+# leave the scan silently doing nothing. A failure is logged and re-raised so the
+# commandlet exits non-zero instead of reporting success.
+try:
     main()
+except Exception:
+    import traceback
+
+    unreal.log_error("HAS: scan failed:\n" + traceback.format_exc())
+    raise
