@@ -875,8 +875,10 @@ Games`, with the version read from `Engine\Build\Build.version` and the newest 5
 one selected for the pipeline; whether an editor process is holding the DLLs; and the
 project's own files, including whether the git working tree has changes.
 
-Then it runs the project's own checks, `npx --no-install tsc --noEmit` and
-`node --test test/`, and reports both exit codes.
+Then it runs the project's own checks, a `tsc --noEmit` typecheck and `node --test
+test/`, and reports both exit codes. If no compiler is installed it says so and skips
+the typecheck instead of calling it a failure; `npm.cmd install --no-save typescript`
+adds one without touching `package.json`.
 
 `-Build` also runs the pipeline's engine stages, and refuses to start while the Unreal
 editor is open, because the link fails on locked DLLs:

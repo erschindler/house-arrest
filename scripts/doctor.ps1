@@ -123,6 +123,26 @@ function Invoke-Captured {
     return $result
 }
 
+# Reads Engine\Build\Build.version. Deliberately not ConvertFrom-Json: that throws on
+# text a different encoding or line-ending convention produced, which is exactly how a
+# perfectly good engine install ends up reported as "unknown". A regex over the text
+# cannot fail that way.
+function Read-EngineVersion {
+    param([string]$Path)
+    try {
+        $text = [System.IO.File]::ReadAllText($Path)
+    } catch {
+        return ""
+    }
+    $major = [regex]::Match($text, '"MajorVersion"\s*:\s*(\d+)')
+    $minor = [regex]::Match($text, '"MinorVersion"\s*:\s*(\d+)')
+    $patch = [regex]::Match($text, '"PatchVersion"\s*:\s*(\d+)')
+    if (-not $major.Success -or -not $minor.Success) { return "" }
+    $value = $major.Groups[1].Value + "." + $minor.Groups[1].Value
+    if ($patch.Success) { $value = $value + "." + $patch.Groups[1].Value }
+    return $value
+}
+
 # Last few lines of captured output, so the console stays readable and the file keeps
 # everything.
 function Tail {
@@ -210,7 +230,7 @@ if ($vswhere -ne "" -and (Test-Path -LiteralPath $vswhere)) {
         Fail "Visual Studio without the C++ toolset: add the 'Game development with C++' workload in the installer"
     }
 } else {
-    Fail ("vswhere not found at " + $vswhere + "; Visual Studio 2022 may not be installed")
+    Fail ("vswhere not found at " + $vswhere + "; install Visual Studio with the 'Game development with C++' workload")
 }
 
 $sdkRoot = "C:\Program Files (x86)\Windows Kits\10\Include"
@@ -258,15 +278,21 @@ foreach ($root in $engineRoots) {
         Note ("skipping " + $root + ": no Engine\Binaries\Win64\UnrealEditor-Cmd.exe")
         continue
     }
-    $version = "unknown"
+    $version = ""
     $versionFile = Join-Path $root "Engine\Build\Build.version"
     if (Test-Path -LiteralPath $versionFile) {
-        try {
-            $build = Get-Content -LiteralPath $versionFile -Raw | ConvertFrom-Json
-            $version = "" + $build.MajorVersion + "." + $build.MinorVersion + "." + $build.PatchVersion
-        } catch {
-            Note ("could not read " + $versionFile)
+        $version = Read-EngineVersion $versionFile
+        if ($version -eq "") {
+            Note ("could not read a version from " + $versionFile + "; falling back to the folder name")
         }
+    }
+    if ($version -eq "" -and $root -match "(?i)UE_(\d+\.\d+)") {
+        # Unreal installs are named by version (UE_5.8), so this still resolves.
+        $version = $Matches[1]
+    }
+    if ($version -eq "") {
+        Note ("skipping " + $root + ": no version could be determined")
+        continue
     }
     Ok ("Unreal Engine " + $version + " at " + $root)
     if ($version -like "5.8*" -or $version -like "5.7*" -or $version -like "5.6*") {
@@ -331,16 +357,41 @@ if ($projectProblems -eq 0) {
 Section "TypeScript"
 $typeReport = New-Object System.Collections.ArrayList
 if ($node.Code -eq 0 -and $projectProblems -eq 0) {
-    $tsc = Invoke-Captured "npx.cmd" @("--no-install", "tsc", "--noEmit") $Project
-    [void]$typeReport.Add("$ npx --no-install tsc --noEmit")
-    [void]$typeReport.Add($tsc.Output)
-    [void]$typeReport.Add("exit " + $tsc.Code)
-    [void]$typeReport.Add("")
-    if ($tsc.Code -eq 0) {
-        Ok "tsc --noEmit"
+    # npm 11 removed "npx --no-install", and with nothing installed locally npx fetches
+    # the unrelated npm package called "tsc" instead of typechecking anything. Find a
+    # compiler explicitly, and treat its absence as information rather than a failure.
+    $tscExe = ""
+    $tscArgs = @("--noEmit")
+    $localBin = Join-Path $Project "node_modules\.bin\tsc.cmd"
+    $localScript = Join-Path $Project "node_modules\typescript\bin\tsc"
+    if (Test-Path -LiteralPath $localBin) {
+        $tscExe = $localBin
+    } elseif (Test-Path -LiteralPath $localScript) {
+        $tscExe = "node"
+        $tscArgs = @($localScript, "--noEmit")
     } else {
-        Fail ("tsc --noEmit exited " + $tsc.Code)
-        Say (Tail $tsc.Output 15)
+        $global = Get-Command "tsc.cmd" -ErrorAction SilentlyContinue
+        if ($null -eq $global) { $global = Get-Command "tsc" -ErrorAction SilentlyContinue }
+        if ($null -ne $global) { $tscExe = $global.Source }
+    }
+
+    if ($tscExe -eq "") {
+        Note "TypeScript is not installed, so the typecheck was skipped"
+        Note "to enable it: npm.cmd install --no-save typescript, then run this script again"
+        [void]$typeReport.Add("typecheck skipped: no tsc on PATH and no local node_modules")
+        [void]$typeReport.Add("")
+    } else {
+        $tsc = Invoke-Captured $tscExe $tscArgs $Project
+        [void]$typeReport.Add("$ " + $tscExe + " " + ($tscArgs -join " "))
+        [void]$typeReport.Add($tsc.Output)
+        [void]$typeReport.Add("exit " + $tsc.Code)
+        [void]$typeReport.Add("")
+        if ($tsc.Code -eq 0) {
+            Ok ("typecheck passed via " + $tscExe)
+        } else {
+            Fail ("typecheck exited " + $tsc.Code + " via " + $tscExe)
+            Say (Tail $tsc.Output 15)
+        }
     }
 
     $tests = Invoke-Captured "node.cmd" @("--test", "test/") $Project
@@ -349,7 +400,17 @@ if ($node.Code -eq 0 -and $projectProblems -eq 0) {
     [void]$typeReport.Add($tests.Output)
     [void]$typeReport.Add("exit " + $tests.Code)
     if ($tests.Code -eq 0) {
-        Ok ("node --test test/ (" + (($tests.Output -split "`r?`n" | Where-Object { $_ -match "^. (tests|pass|fail) " }) -join "; ") + ")")
+        # Unanchored on purpose: the symbol in front of the counts is read as mojibake
+        # under Windows PowerShell 5.1, so anchoring on a non-word character fails.
+        $passed = [regex]::Match($tests.Output, "\bpass (\d+)")
+        $failed = [regex]::Match($tests.Output, "\bfail (\d+)")
+        if ($passed.Success) {
+            $counts = $passed.Groups[1].Value + " pass"
+            if ($failed.Success) { $counts = $counts + ", " + $failed.Groups[1].Value + " fail" }
+            Ok ("node --test test/ (" + $counts + ")")
+        } else {
+            Ok "node --test test/ exited 0"
+        }
     } else {
         Fail ("node --test test/ exited " + $tests.Code)
         Say (Tail $tests.Output 20)
