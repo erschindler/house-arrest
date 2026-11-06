@@ -104,6 +104,16 @@ test("an empty library reports every class as a gap, with search terms", () => {
     report.blocking.every((line) => line.includes("search:")),
     "every gap must tell the art team what to search for",
   );
+
+  const dir = "artifacts/installer-empty";
+  emitInstall(dir, report);
+  const plan = readFileSync(join(dir, "Docs/FAB_ACQUISITION_PLAN.md"), "utf8");
+
+  assert.match(
+    plan,
+    /https:\/\/www\.fab\.com\/search\?q=abandoned\+basement\+interior\+ue5/,
+    "every gap must link to a Fab search, not just name one",
+  );
 });
 
 test("emitted output is byte-identical across runs", () => {

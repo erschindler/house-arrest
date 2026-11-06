@@ -248,6 +248,10 @@ function checklistCsv(report: InstallReport): string {
   return `${rows.join("\n")}\n`;
 }
 
+export function fabSearchUrl(term: string): string {
+  return `https://www.fab.com/search?q=${encodeURIComponent(term.trim()).replace(/%20/g, "+")}`;
+}
+
 function acquisitionPlan(report: InstallReport): string {
   const unresolved = report.resolutions.filter((resolution) => resolution.status === "unresolved");
   const gated = report.resolutions.filter((resolution) => resolution.status === "gated");
@@ -273,6 +277,7 @@ function acquisitionPlan(report: InstallReport): string {
       lines.push(`### ${resolution.assetClass}`);
       lines.push(`- kind: ${spec.kind}; LODs: ${spec.requiresLods ? "2+" : "n/a"}; triangle budget: ${spec.maxTriangles}`);
       lines.push(`- search: ${spec.searchTerms.map((term) => `"${term}"`).join(", ")}`);
+      lines.push(`- fab: ${spec.searchTerms.map((term) => `[${term}](${fabSearchUrl(term)})`).join(" | ")}`);
       lines.push(`- acceptance: ${spec.acceptance}`);
       const rejections = resolution.rejected.slice(0, 3);
       if (rejections.length > 0) {
