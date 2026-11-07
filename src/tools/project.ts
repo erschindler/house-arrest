@@ -138,6 +138,15 @@ EditorStartupMap=${start}
 
 [/Script/Engine.Engine]
 +ActiveGameNameRedirects=(OldGameName="TP_Blank",NewGameName="/Script/${options.projectName}")
+
+[/Script/WindowsTargetPlatform.WindowsTargetSettings]
+; Shader Model 6 carries Nanite and Lumen. Without it the editor opens with a "Missing
+; Project Settings" dialog and any Nanite mesh draws as its fallback, so it is part of
+; the scaffold rather than something to fix by hand after the first launch - this file
+; is rewritten on every run, which would silently undo a dialog-saved setting.
+DefaultGraphicsRHI=DefaultGraphicsRHI_DX12
++TargetedShaderFormats=PCD3D_SM6
+-TargetedShaderFormats=PCD3D_SM5
 `;
 }
 
