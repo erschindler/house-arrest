@@ -130,20 +130,75 @@ def mesh_stats(package_path):
     return 0, max(1, lods), False
 
 
+CLASS_ATTRS = ("asset_class_path", "asset_class")
+
+
+def class_text(asset):
+    """Class name of a registry asset, however this engine version spells it."""
+    for attr in CLASS_ATTRS:
+        value = getattr(asset, attr, None)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text.rsplit(".", 1)[-1]
+    return ""
+
+
+def mesh_class_path():
+    """TopLevelAssetPath for UStaticMesh, when the engine exposes a constructor."""
+    ctor = getattr(unreal, "TopLevelAssetPath", None)
+    if ctor is None:
+        return None
+    for args in (("/Script/Engine", "StaticMesh"), ("/Script/Engine.StaticMesh",)):
+        try:
+            return ctor(*args)
+        except Exception:
+            continue
+    return None
+
+
+def registry():
+    return unreal.AssetRegistryHelpers.get_asset_registry()
+
+
+def skipped_by_prefix(package):
+    return any(package == prefix or package.startswith(prefix + "/") for prefix in SKIP_PREFIXES)
+
+
 def static_meshes(roots):
-    """Every static mesh under the roots, as (package path, asset name), sorted."""
-    registry = unreal.AssetRegistryHelpers.get_asset_registry()
+    """Static meshes under the roots as (package, name), plus the class names seen and
+    the meshes a SKIP_PREFIX dropped, so a scan that finds nothing can explain itself."""
     found = {}
+    classes = {}
+    skipped = []
     for root in roots:
-        for asset in registry.get_assets_by_path(root, True):
+        for asset in registry().get_assets_by_path(root, True):
             package = str(asset.package_name)
-            if any(package == prefix or package.startswith(prefix + "/") for prefix in SKIP_PREFIXES):
+            label = class_text(asset) or "(no class reported)"
+            classes[label] = classes.get(label, 0) + 1
+            if "staticmesh" not in label.lower():
                 continue
-            class_name = str(getattr(asset, "asset_class_path", "")).split(".")[-1]
-            if class_name != "StaticMesh":
+            if skipped_by_prefix(package):
+                skipped.append(package)
                 continue
             found[package] = str(asset.asset_name)
-    return sorted(found.items())
+
+    # Ask the registry for the class by name, which does not depend on how an asset
+    # reports its own class string.
+    class_path = mesh_class_path()
+    if class_path is not None:
+        try:
+            for asset in registry().get_assets_by_class(class_path, True):
+                package = str(asset.package_name)
+                if skipped_by_prefix(package):
+                    continue
+                if any(package == root or package.startswith(root + "/") for root in roots):
+                    found[package] = str(asset.asset_name)
+        except Exception as problem:
+            say("class query failed, relying on class names: %s" % problem)
+
+    return sorted(found.items()), classes, skipped
 
 
 def draft_roles(entries):
@@ -167,7 +222,7 @@ def main():
 
     entries = []
     unreadable = []
-    meshes = static_meshes(roots)
+    meshes, classes, skipped = static_meshes(roots)
     say("%d static meshes under %s" % (len(meshes), ", ".join(roots)))
     for package, name in meshes:
         triangles, lods, readable = mesh_stats(package)
@@ -195,6 +250,11 @@ def main():
             say("/Game holds %d assets in: %s" % (count, ", ".join(folders)))
         else:
             say("/Game holds no assets at all - import the pack into the project first")
+        if skipped:
+            say("%d static meshes were dropped by SKIP_PREFIXES: %s" % (len(skipped), ", ".join(skipped[:5])))
+        if classes:
+            ranked = sorted(classes.items(), key=lambda item: (-item[1], item[0]))[:12]
+            say("classes seen: %s" % ", ".join("%s x%d" % (name, count) for name, count in ranked))
         return 1
 
     roles = draft_roles(entries)
