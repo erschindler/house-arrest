@@ -49,6 +49,9 @@ ROLE_RULES = [
 ]
 
 TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
+# Mesh names run words together ("SM_TableRound"), so split on the case change as well:
+# otherwise the whole thing is one token and "table" never matches anything.
+CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 
 LOG = []
@@ -76,7 +79,8 @@ def write_report():
 def tokens(*parts):
     found = set()
     for part in parts:
-        for token in TOKEN_SPLIT.split(str(part).lower()):
+        text = CAMEL_BOUNDARY.sub(" ", str(part))
+        for token in TOKEN_SPLIT.split(text.lower()):
             if token and len(token) > 1:
                 found.add(token)
     return sorted(found)
