@@ -49,9 +49,26 @@ ROLE_RULES = [
 TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
 
 
+LOG = []
+
+
 def say(message):
+    LOG.append(message)
     unreal.log("HAS: " + message)
     print("HAS: " + message)
+
+
+def report_path():
+    return os.path.splitext(OUT_PATH)[0] + ".report.txt"
+
+
+def write_report():
+    """Write what the scan said, so it is readable even when the log is filtered."""
+    directory = os.path.dirname(OUT_PATH)
+    if directory and not os.path.isdir(directory):
+        os.makedirs(directory)
+    with open(report_path(), "w", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n".join(LOG) + "\n" if LOG else "the scan said nothing\n")
 
 
 def tokens(*parts):
@@ -63,15 +80,17 @@ def tokens(*parts):
     return sorted(found)
 
 
-def game_folders(limit=20):
-    """Top-level folders under /Game, so a wrong HAS_PACK is easy to correct."""
+def game_summary(limit=20):
+    """(asset count, top-level folders) under /Game, so a wrong HAS_PACK is correctable."""
     registry = unreal.AssetRegistryHelpers.get_asset_registry()
-    names = set()
+    folders = set()
+    count = 0
     for asset in registry.get_assets_by_path("/Game", True):
+        count += 1
         package = str(asset.package_name)
         if package.startswith("/Game/"):
-            names.add(package.split("/")[2])
-    return sorted(names)[:limit]
+            folders.add(package.split("/")[2])
+    return count, sorted(folders)[:limit]
 
 
 def scan_roots():
@@ -146,7 +165,9 @@ def main():
 
     entries = []
     unreadable = []
-    for package, name in static_meshes(roots):
+    meshes = static_meshes(roots)
+    say("%d static meshes under %s" % (len(meshes), ", ".join(roots)))
+    for package, name in meshes:
         triangles, lods, readable = mesh_stats(package)
         if not readable:
             unreadable.append(package)
@@ -167,9 +188,9 @@ def main():
 
     if not entries:
         say("no static meshes under %s - set HAS_PACK to the folder Fab imported into" % ", ".join(roots))
-        found = game_folders()
-        if found:
-            say("/Game holds: %s" % ", ".join(found))
+        count, folders = game_summary()
+        if folders:
+            say("/Game holds %d assets in: %s" % (count, ", ".join(folders)))
         else:
             say("/Game holds no assets at all - import the pack into the project first")
         return 1
@@ -203,9 +224,15 @@ def main():
 # leave the scan silently doing nothing. A failure is logged and re-raised so the
 # commandlet exits non-zero instead of reporting success.
 try:
-    main()
+    status = main()
 except Exception:
     import traceback
 
-    unreal.log_error("HAS: scan failed:\n" + traceback.format_exc())
+    LOG.append("scan failed:\n" + traceback.format_exc())
+    write_report()
+    unreal.log_error("HAS: scan failed, report: %s\n%s" % (report_path(), traceback.format_exc()))
     raise
+
+write_report()
+if status:
+    raise RuntimeError("scan finished with status %d, report: %s" % (status, report_path()))
