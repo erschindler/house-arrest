@@ -938,3 +938,53 @@ Reports go to `C:\HouseArrest\diagnostics` (created if missing, never inside the
 tree) as `environment.txt`, `typescript.txt` and, with `-Build`, `pipeline.txt`. The
 names are fixed so two runs diff cleanly. The exit code is 1 when anything is missing,
 which makes it usable as a gate.
+
+### Driving the editor with a local AI agent
+
+Unreal Engine 5.8 ships an MCP server **inside the editor** — plugin identifier
+`ModelContextProtocol`, shown in the Plugins browser as *Unreal MCP*. It binds
+`http://127.0.0.1:8000/mcp` and accepts any MCP client; the tools themselves come from
+the `AllToolsets` aggregator, which is what actually exposes actor, scene, material and
+object editing.
+
+The generated `.uproject` enables both, because it is rewritten on every run: a plugin
+ticked in the Plugins browser is dropped at the next `-Build`. Allowing the server to
+run during the pipeline's own commandlets is harmless — auto-start is off by default,
+so nothing is listening unless an interactive editor starts it.
+
+Ollama by itself cannot drive the editor. It is an inference server: it hosts a model
+and answers `/api/chat`, and it has no MCP client, no screen, and no way to reach a
+level. Something has to sit between the two and translate the model's tool calls into
+MCP requests. That gap is the whole setup:
+
+1. **Turn the server on.** `Edit > Editor Preferences > General > Model Context
+   Protocol > Auto Start Server`, or run `ModelContextProtocol.StartServer` in the
+   editor console. The Output Log line from `LogModelContextProtocol` reports the bind
+   address; if the server is not up, that is the first place to look.
+2. **Write a client config** (optional, for clients that read `.mcp.json`):
+   `ModelContextProtocol.GenerateClientConfig All` in the console writes
+   `.mcp.json` into the project root with the `unreal-mcp` entry.
+3. **Install a client that can be backed by Ollama.** `ollmcp`, from the
+   `mcp-client-for-ollama` package, speaks Ollama's native API and connects to
+   Streamable HTTP servers:
+
+   ```powershell
+   pipx install mcp-client-for-ollama
+   ollmcp --mcp-server-url http://127.0.0.1:8000/mcp --model qwen3.5:9b
+   ```
+
+   Use whatever tag `ollama list` actually shows. The model has to declare tool
+   support — `ollama show <model>` lists `tools` under Capabilities when it does — and
+   a build without it will chat happily and never call anything.
+
+Two limits worth knowing before blaming the setup. A 8–9B model improvises multi-step
+tool sequences badly: one clear instruction per turn, and ask it to read the level back
+(`list_actors`) instead of trusting that a change landed. And 5.8 stable shipped with a
+bug where the server starts but advertises only `AgentSkillToolset`, which cannot touch
+a level; `AllToolsets` in the `.uproject` is the fix, so if that is the only toolset in
+the log, the plugin list did not take.
+
+Finally, an agent driving the editor is **scratch work**. The room stage rewrites
+`HouseArrest.umap` from the `PROPS` table on every build, so actors placed by hand — or
+by an agent — do not survive. Anything worth keeping belongs in the `PROPS` table or the
+generated component, then comes back through `scripts\doctor.ps1 -Build`.

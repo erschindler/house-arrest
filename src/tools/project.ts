@@ -57,6 +57,14 @@ function uprojectFile(options: ProjectOptions): string {
       // EditorScriptingUtilities.
       { Name: "PythonScriptPlugin", Enabled: true },
       { Name: "EditorScriptingUtilities", Enabled: true },
+      // Unreal MCP (5.8): the editor hosts an MCP server on 127.0.0.1:8000/mcp so a
+      // local AI agent can drive the level. Enabled here, not in the Plugins browser,
+      // because this file is rewritten on every run and a browser-toggled plugin
+      // would be silently dropped at the next build. AllToolsets is the aggregator
+      // that actually supplies the tools; without it 5.8 starts the server and
+      // advertises only AgentSkillToolset, which cannot touch a level.
+      { Name: "ModelContextProtocol", Enabled: true },
+      { Name: "AllToolsets", Enabled: true },
     ],
   })}\n`;
 }
