@@ -9,8 +9,10 @@ or paste this one line into the Output Log's Python console:
     exec(open(r"C:\\ha10\\house-arrest-main\\scripts\\scan_pack.py").read())
 
 Nothing outside Content/ is touched and no asset is modified: the script reads the
-asset registry, loads each mesh to count LODs, and writes one JSON file. Review it
-before running the pipeline -- the role guesses are guesses.
+asset registry, loads each mesh to count LODs, and writes one JSON file. Beside it it
+writes a .report.txt of everything it found, because the Python commandlet's log filter
+hides unreal.log and print() output. Review both before running the pipeline -- the
+role guesses are guesses.
 
 Configuration (environment variable, or edit the default below):
 
@@ -221,8 +223,9 @@ def main():
 
 # Called unconditionally on purpose: -run=pythonscript imports this file as a module
 # named after the file, so __name__ is never "__main__" and the usual guard would
-# leave the scan silently doing nothing. A failure is logged and re-raised so the
-# commandlet exits non-zero instead of reporting success.
+# leave the scan silently doing nothing. The report is written on every path and a
+# failure raises, so the commandlet cannot report success for a scan that found
+# nothing.
 try:
     status = main()
 except Exception:

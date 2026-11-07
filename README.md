@@ -824,6 +824,8 @@ count, triangle count and folder tags, plus a guessed `role` for each room ancho
 whose name matches (`chair`, `desk`, `monitor`, `phone`, `camera`, `shelf`, `drain`,
 `lamp`). It modifies nothing.
 
+It writes the library file plus a `.report.txt` next to it listing how many meshes it found, which anchors it matched and which it could not; read that file rather than the console, because the Python commandlet filters the script's own log lines.
+
 ```powershell
 curl.exe -L -o scripts\scan_pack.py "https://raw.githubusercontent.com/erschindler/house-arrest/main/scripts/scan_pack.py"
 ```
