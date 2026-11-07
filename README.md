@@ -816,6 +816,34 @@ Expect the kit's own coordinates not to match these anchors on the first pass; t
 stage is idempotent, so move the actors in the editor or edit the `PROPS` table and
 re-run `props`.
 
+### Where the meshes come from
+
+The generated map holds no static meshes of its own, so the room stays primitives until
+some content exists in `/Game`. Nothing in this repo downloads art for you; both routes
+below are free and manual.
+
+**Fab.** Any free environment or prop pack works: add it to your library on the Fab
+site, then use the editor's Fab panel to add it to this project. Its assets land under
+`/Game/<PackName>/`, where the scanner below will find them -- no `-Drop` needed.
+
+**Starter Content, copied from an older engine.** Epic stopped shipping the Starter
+Content pack with the engine in 5.7, so a 5.8 install cannot add it from the Content
+Browser. If an earlier engine is still installed, copy `Samples\StarterContent` and
+`FeaturePacks\StarterContent.upack` from it into the 5.8 install, restart the editor,
+then use Add -> Add Feature or Content Pack -> Starter Content. That gives
+`/Game/StarterContent` with chairs, tables, lamps and doors: enough to prove the art
+pipeline end to end before committing to a real pack.
+
+Probe for it first:
+
+```powershell
+Get-ChildItem "C:\Program Files\Epic Games" -Recurse -Filter StarterContent.upack -ErrorAction SilentlyContinue |
+  Select-Object FullName
+```
+
+Loose files (`.fbx`, `.png`, `.uasset`) can also be imported from a folder with
+`scripts\doctor.ps1 -Build -Drop <folder>`.
+
 ### Drafting that index from inside the editor
 
 `scripts/scan_pack.py` reads the asset registry of a pack you have already imported
