@@ -36,7 +36,7 @@ import type { AssetLibrary } from "./library.ts";
 import { buildReport } from "./resolver.ts";
 import type { InstallReport } from "./resolver.ts";
 import { emitInstall } from "./ue5.ts";
-import { emitProject } from "./project.ts";
+import { emitProject, startupMap } from "./project.ts";
 import { batchArguments, engineTools, planStages, preflightProblems } from "./pipeline.ts";
 import type { RunOptions, StageId } from "./pipeline.ts";
 
@@ -255,13 +255,15 @@ function main(): void {
         console.log(`  wrote ${written.length} files into ${options.projectDir}`);
       } else if (stage.id === "project") {
         // The room stage builds the level, so the config may only claim it as the
-        // startup map when that stage is actually going to run. Otherwise the editor
-        // and the packaged build keep the engine's Entry map, which is empty.
+        // startup map when that stage is actually going to run - or when the level is
+        // already on disk and this run merely leaves it alone. Otherwise the editor and
+        // the packaged build keep the engine's Entry map, which is empty.
         const roomPlanned = plan.some((entry) => entry.id === "room" && !entry.skipReason);
+        const level = arg("level", "/Game/Maps/HouseArrest");
         const written = emitProject(options.projectDir, {
           projectName: options.projectName,
           engineAssociation: options.engineAssociation,
-          defaultMap: roomPlanned ? arg("level", "/Game/Maps/HouseArrest") : null,
+          defaultMap: startupMap(options.projectDir, level, roomPlanned),
         });
         console.log(`  wrote ${written.length} files (uproject, targets, module, python)`);
       } else if (stage.command) {

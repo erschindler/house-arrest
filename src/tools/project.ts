@@ -36,6 +36,21 @@ export type ProjectOptions = {
   defaultMap?: string | null;
 };
 
+/**
+ * The startup map the config should claim.
+ *
+ * The room stage builds the level, so naming it is only safe when that stage is about
+ * to run. A partial run (`--only project`) skips it, but the level it built on an
+ * earlier run is still on disk: falling back to the engine's Entry map there silently
+ * repoints the editor and the packaged build at an empty level.
+ */
+export function startupMap(projectDir: string, level: string, roomPlanned: boolean): string | null {
+  if (roomPlanned) return level;
+  if (!level.startsWith("/Game/")) return null;
+  const asset = join(projectDir, "Content", `${level.slice("/Game/".length)}.umap`);
+  return existsSync(asset) ? level : null;
+}
+
 function write(outDir: string, relative: string, contents: string, written: string[]): void {
   const target = join(outDir, relative);
   mkdirSync(dirname(target), { recursive: true });

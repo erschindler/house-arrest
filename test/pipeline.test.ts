@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { emitProject } from "../src/tools/project.ts";
+import { emitProject, startupMap } from "../src/tools/project.ts";
 import {
   batchArguments,
   engineTools,
@@ -140,6 +140,28 @@ test("the startup map is claimed only when the room stage will build it", () => 
     "the packaged build has to boot into the room, not an empty engine map",
   );
   assert.match(room, /EditorStartupMap=\/Game\/Maps\/HouseArrest/);
+});
+
+test("a partial run keeps a startup map whose level is already on disk", () => {
+  const built = "artifacts/project-partial";
+  mkdirSync(join(built, "Content/Maps"), { recursive: true });
+  writeFileSync(join(built, "Content/Maps/HouseArrest.umap"), "");
+
+  assert.equal(
+    startupMap(built, "/Game/Maps/HouseArrest", false),
+    "/Game/Maps/HouseArrest",
+    "--only project skips the room stage, but dropping the map would repoint the editor at Entry",
+  );
+  assert.equal(
+    startupMap("artifacts/project-never-built", "/Game/Maps/HouseArrest", false),
+    null,
+    "nothing ever built that level, so the engine Entry map has to stay",
+  );
+  assert.equal(
+    startupMap("artifacts/project-never-built", "/Game/Maps/HouseArrest", true),
+    "/Game/Maps/HouseArrest",
+    "the room stage is about to write the level, so the config may name it",
+  );
 });
 
 test("preflight rejects a drop folder with nothing the importer can use", () => {
