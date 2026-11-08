@@ -16,7 +16,7 @@
  * No timestamps: the scaffold is byte-identical for the same inputs.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { stableStringify } from "../save/serialize.ts";
 import { emitSystems } from "./ue-systems.ts";
@@ -43,7 +43,7 @@ function write(outDir: string, relative: string, contents: string, written: stri
   written.push(relative);
 }
 
-function uprojectFile(options: ProjectOptions): string {
+function uprojectFile(options: ProjectOptions, hasUnrealMcp = false): string {
   return `${stableStringify({
     FileVersion: 3,
     EngineAssociation: options.engineAssociation,
@@ -65,6 +65,12 @@ function uprojectFile(options: ProjectOptions): string {
       // advertises only AgentSkillToolset, which cannot touch a level.
       { Name: "ModelContextProtocol", Enabled: true },
       { Name: "AllToolsets", Enabled: true },
+      // ai-game.dev's Unreal-MCP is a third-party plugin installed per project, so it is
+      // listed only when Plugins/UnrealMCP is actually on disk: a fresh checkout would
+      // otherwise reference a plugin the engine cannot find. It has to come from the
+      // generator, because this file is rewritten on every run and a hand-added entry
+      // is exactly what the next build would drop.
+      ...(hasUnrealMcp ? [{ Name: "UnrealMCP", Enabled: true }] : []),
     ],
   })}\n`;
 }
@@ -536,7 +542,8 @@ export function emitProject(outDir: string, options: ProjectOptions): string[] {
   const written: string[] = [];
   const name = options.projectName;
 
-  write(outDir, `${name}.uproject`, uprojectFile(options), written);
+  const hasUnrealMcp = existsSync(join(outDir, "Plugins/UnrealMCP"));
+  write(outDir, `${name}.uproject`, uprojectFile(options, hasUnrealMcp), written);
   write(outDir, `Source/${name}.Target.cs`, targetFile(options, false), written);
   write(outDir, `Source/${name}Editor.Target.cs`, targetFile(options, true), written);
   write(outDir, `Source/${name}/${name}.Build.cs`, moduleBuildFile(options), written);
